@@ -1,13 +1,36 @@
 import http from "node:http";
 import { URL } from "node:url";
+import { config, isGoogleOAuthConfigured } from "./config.mjs";
+import { buildGoogleAuthUrl, createOAuthState, exchangeGoogleCode, verifyGoogleIdToken } from "./oauth.mjs";
 import { analyzeAnswer, appendUtterance, createInitialQuestion, createNextQuestion, finishFeedbackJob } from "./services.mjs";
-import { clearSessionCookie, parseCookies, readJson, route, sendJson, sendNoContent, setSessionCookie } from "./http.mjs";
-import { createSessionForUser, db, ensureDemoUser, findUserBySession, nowIso, seedInterviewSession, createId } from "./store.mjs";
+import {
+  clearOAuthStateCookie,
+  clearSessionCookie,
+  parseCookies,
+  readJson,
+  route,
+  sendJson,
+  sendNoContent,
+  setOAuthStateCookie,
+  setSessionCookie
+} from "./http.mjs";
+import {
+  consumeOAuthState,
+  createId,
+  createSessionForUser,
+  db,
+  ensureDemoUser,
+  findOrCreateGoogleUser,
+  findUserBySession,
+  nowIso,
+  revokeSession,
+  saveOAuthState,
+  seedInterviewSession
+} from "./store.mjs";
 import { feedbackStatuses, sessionStatuses } from "../../../packages/shared/src/constants.mjs";
 
-const port = Number(process.env.PORT || 8080);
-
 const routes = [];
+
 function add(method, path, handler, auth = true) {
   routes.push({ method, path, handler, auth });
 }
@@ -28,18 +51,64 @@ function requireSessionForUser(sessionId, userId) {
   return { session };
 }
 
+function redirect(res, location, setCookie) {
+  const headers = { location };
+  if (setCookie) headers["set-cookie"] = setCookie;
+  res.writeHead(302, headers);
+  res.end();
+}
+
 add("GET", "/api/v1/health", async (_req, res) => {
   sendJson(res, 200, { status: "ok", service: "interview-backend-api", time: nowIso() });
 }, false);
 
 add("GET", "/api/v1/auth/google/start", async (_req, res) => {
+  if (isGoogleOAuthConfigured()) {
+    const state = createOAuthState();
+    saveOAuthState(state);
+    sendJson(
+      res,
+      200,
+      { mode: "google_oauth", authUrl: buildGoogleAuthUrl(state) },
+      { "set-cookie": setOAuthStateCookie(state) }
+    );
+    return;
+  }
+
   const user = ensureDemoUser();
   const sessionId = createSessionForUser(user.id);
-  sendJson(res, 200, {
-    mode: "demo_oauth",
-    message: "Demo OAuth completed. Real Google OAuth client will replace this handler.",
-    user: publicUser(user)
-  }, { "set-cookie": setSessionCookie(sessionId) });
+  sendJson(
+    res,
+    200,
+    {
+      mode: "demo_oauth",
+      message: "Demo OAuth completed. Set Google OAuth env vars to use real OAuth.",
+      user: publicUser(user)
+    },
+    { "set-cookie": setSessionCookie(sessionId) }
+  );
+}, false);
+
+add("GET", "/api/v1/auth/google/callback", async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  const cookies = parseCookies(req.headers.cookie);
+
+  if (!code || !state || state !== cookies.interview_oauth_state || !consumeOAuthState(state)) {
+    redirect(res, `${config.appOrigin}/?auth=failed`, clearOAuthStateCookie());
+    return;
+  }
+
+  try {
+    const token = await exchangeGoogleCode(code);
+    const googleProfile = verifyGoogleIdToken(token.id_token);
+    const user = findOrCreateGoogleUser(googleProfile);
+    const sessionId = createSessionForUser(user.id);
+    redirect(res, config.appOrigin, [setSessionCookie(sessionId), clearOAuthStateCookie()]);
+  } catch {
+    redirect(res, `${config.appOrigin}/?auth=failed`, clearOAuthStateCookie());
+  }
 }, false);
 
 add("GET", "/api/v1/auth/me", async (_req, res, ctx) => {
@@ -48,8 +117,7 @@ add("GET", "/api/v1/auth/me", async (_req, res, ctx) => {
 
 add("POST", "/api/v1/auth/logout", async (req, res) => {
   const cookies = parseCookies(req.headers.cookie);
-  const session = db.authSessions.get(cookies.interview_session);
-  if (session) session.revokedAt = nowIso();
+  revokeSession(cookies.interview_session);
   sendNoContent(res, { "set-cookie": clearSessionCookie() });
 });
 
@@ -224,7 +292,7 @@ add("GET", "/api/v1/interview-sessions/:sessionId/feedback", async (_req, res, c
 
 const server = http.createServer(async (req, res) => {
   try {
-    const origin = req.headers.origin || "http://localhost:5173";
+    const origin = req.headers.origin || config.appOrigin;
     res.setHeader("access-control-allow-origin", origin);
     res.setHeader("access-control-allow-credentials", "true");
     res.setHeader("access-control-allow-methods", "GET,POST,PUT,DELETE,OPTIONS");
@@ -253,6 +321,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`interview-backend-api listening on http://localhost:${port}`);
+server.listen(config.port, () => {
+  console.log(`interview-backend-api listening on http://localhost:${config.port}`);
 });

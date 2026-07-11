@@ -1,10 +1,12 @@
 import crypto from "node:crypto";
 import { defaultVoiceSettings, feedbackStatuses, sessionStatuses } from "../../../packages/shared/src/constants.mjs";
+import { config } from "./config.mjs";
 
 export const db = {
   users: new Map(),
   sessions: new Map(),
   authSessions: new Map(),
+  oauthStates: new Map(),
   profiles: new Map(),
   settings: new Map(),
   jobs: new Map(),
@@ -13,6 +15,13 @@ export const db = {
 
 export function createId(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString("hex")}`;
+}
+
+export function hashSessionId(sessionId) {
+  return crypto
+    .createHmac("sha256", config.sessionSecret)
+    .update(sessionId)
+    .digest("hex");
 }
 
 export function nowIso() {
@@ -36,10 +45,36 @@ export function ensureDemoUser() {
   return db.users.get(userId);
 }
 
+export function findOrCreateGoogleUser(googleProfile) {
+  const existing = [...db.users.values()].find((user) => user.googleSub === googleProfile.googleSub);
+  if (existing) {
+    existing.email = googleProfile.email;
+    existing.name = googleProfile.name;
+    existing.updatedAt = nowIso();
+    return existing;
+  }
+
+  const userId = createId("usr");
+  const user = {
+    id: userId,
+    googleSub: googleProfile.googleSub,
+    email: googleProfile.email,
+    name: googleProfile.name,
+    profileCompleted: false,
+    createdAt: nowIso(),
+    updatedAt: nowIso()
+  };
+  db.users.set(userId, user);
+  db.settings.set(userId, { ...defaultVoiceSettings, updatedAt: nowIso() });
+  return user;
+}
+
 export function createSessionForUser(userId) {
   const sessionId = createId("auth");
-  db.authSessions.set(sessionId, {
-    id: sessionId,
+  const sessionIdHash = hashSessionId(sessionId);
+  db.authSessions.set(sessionIdHash, {
+    id: createId("authdoc"),
+    sessionIdHash,
     userId,
     createdAt: nowIso(),
     expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
@@ -50,10 +85,33 @@ export function createSessionForUser(userId) {
 
 export function findUserBySession(sessionId) {
   if (!sessionId) return null;
-  const session = db.authSessions.get(sessionId);
+  const session = db.authSessions.get(hashSessionId(sessionId));
   if (!session || session.revokedAt) return null;
   if (Date.parse(session.expiresAt) < Date.now()) return null;
   return db.users.get(session.userId) ?? null;
+}
+
+export function revokeSession(sessionId) {
+  if (!sessionId) return;
+  const session = db.authSessions.get(hashSessionId(sessionId));
+  if (session) session.revokedAt = nowIso();
+}
+
+export function saveOAuthState(state) {
+  db.oauthStates.set(state, {
+    state,
+    createdAt: nowIso(),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    usedAt: null
+  });
+}
+
+export function consumeOAuthState(state) {
+  const item = db.oauthStates.get(state);
+  if (!item || item.usedAt) return false;
+  if (Date.parse(item.expiresAt) < Date.now()) return false;
+  item.usedAt = nowIso();
+  return true;
 }
 
 export function seedInterviewSession(userId, condition) {

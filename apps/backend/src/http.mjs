@@ -43,6 +43,14 @@ export function clearSessionCookie() {
   return "interview_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
 }
 
+export function setOAuthStateCookie(state) {
+  return `interview_oauth_state=${encodeURIComponent(state)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600`;
+}
+
+export function clearOAuthStateCookie() {
+  return "interview_oauth_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+}
+
 export function route(method, pathname, pattern) {
   if (method !== pattern.method) return null;
   const pathParts = pathname.split("/").filter(Boolean);

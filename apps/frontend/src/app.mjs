@@ -229,7 +229,11 @@ document.addEventListener("click", async (event) => {
     }
     if (action === "toggle-drawer") state.drawerOpen = !state.drawerOpen;
     if (action === "login") {
-      await api("/auth/google/start");
+      const login = await api("/auth/google/start");
+      if (login.authUrl) {
+        window.location.href = login.authUrl;
+        return;
+      }
       await refreshMe();
     }
     if (action === "logout") {

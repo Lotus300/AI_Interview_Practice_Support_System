@@ -1,8 +1,8 @@
 import { db, createId, nowIso } from "./store.mjs";
-import { feedbackStatuses, sessionStatuses } from "../../../packages/shared/src/constants.mjs";
+import { feedbackStatuses } from "../../../packages/shared/src/constants.mjs";
 
 export function createInitialQuestion(profile, session) {
-  const name = profile?.fullName || "お名前";
+  const name = profile?.fullName || "応募者";
   const role = session.condition?.jobRole || "希望職種";
   return {
     id: createId("q"),
@@ -12,7 +12,7 @@ export function createInitialQuestion(profile, session) {
   };
 }
 
-export function analyzeAnswer(profile, session, answerText) {
+export function analyzeAnswer(profile, _session, answerText) {
   const abstractHints = [];
   if (!/[0-9０-９]/.test(answerText)) {
     abstractHints.push("成果や規模を示す数値が不足しています。");
