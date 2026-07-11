@@ -1,0 +1,189 @@
+{
+  "name": "AI面接練習支援システム 画面デザイン",
+  "version": "1.0.0",
+  "status": "approved",
+  "source": {
+    "mock": "outputs/screen-mock/index.html",
+    "typescriptSource": "work/screen-mock/src/app.ts",
+    "styles": "outputs/screen-mock/style.css"
+  },
+  "designPrinciples": [
+    "個人利用の面接練習に集中できる静かな業務アプリ調デザイン",
+    "面接実施画面では音声入力、音声認識、LLM分析、VOICEVOX再生の状態を常時表示する",
+    "音声・LLM処理に失敗しても再試行またはテキスト入力で継続できる導線を用意する",
+    "矛盾点は断定せず確認候補として表示する",
+    "ナビゲーションはハンバーガーメニューによるドロワー形式とする"
+  ],
+  "tokens": {
+    "colors": {
+      "background": "#f5f7fb",
+      "surface": "#ffffff",
+      "panel": "#f8fafc",
+      "ink": "#172033",
+      "muted": "#64748b",
+      "line": "#d8e0ea",
+      "lineStrong": "#bac7d6",
+      "primary": "#2563eb",
+      "primaryDark": "#1d4ed8",
+      "green": "#059669",
+      "yellow": "#b7791f",
+      "red": "#dc2626",
+      "blueSoft": "#eff6ff",
+      "greenSoft": "#ecfdf5",
+      "yellowSoft": "#fffbeb",
+      "redSoft": "#fef2f2"
+    },
+    "typography": {
+      "fontFamily": "\"Yu Gothic\", \"Meiryo\", system-ui, sans-serif",
+      "baseSizePx": 14,
+      "pageTitlePx": 22,
+      "panelTitlePx": 15,
+      "smallTextPx": 12,
+      "letterSpacing": 0
+    },
+    "radius": {
+      "defaultPx": 6,
+      "panelPx": 8,
+      "pill": 999
+    },
+    "spacing": {
+      "topbarHeightPx": 56,
+      "pagePaddingPx": 24,
+      "panelPaddingPx": 16,
+      "gridGapPx": 16
+    },
+    "shadow": {
+      "screen": "0 14px 34px rgba(15, 23, 42, 0.08)",
+      "drawer": "16px 0 30px rgba(15, 23, 42, 0.12)"
+    }
+  },
+  "layout": {
+    "navigation": {
+      "type": "hamburgerDrawer",
+      "drawerWidthPx": 280,
+      "topOffsetPx": 56,
+      "closeOnScrimClick": true,
+      "closeOnNavigation": true
+    },
+    "main": {
+      "type": "singleColumnWorkspace",
+      "screenContainer": {
+        "background": "surface",
+        "border": "line",
+        "radiusPx": 8,
+        "minHeightPx": 620
+      }
+    },
+    "responsive": {
+      "breakpointPx": 980,
+      "behavior": "gridsCollapseToSingleColumn"
+    }
+  },
+  "components": {
+    "button": {
+      "variants": ["primary", "ghost", "danger"],
+      "height": "content-based",
+      "radiusPx": 6,
+      "usage": "主要操作、戻る、削除、モック状態切替"
+    },
+    "status": {
+      "variants": {
+        "default": "neutral",
+        "blue": "processing or active",
+        "green": "success or available",
+        "yellow": "warning or confirmation candidate",
+        "red": "error or destructive"
+      },
+      "shape": "pill"
+    },
+    "field": {
+      "types": ["input", "select", "textarea"],
+      "labelPosition": "top",
+      "border": "lineStrong"
+    },
+    "numberControl": {
+      "targets": ["voiceSpeed", "voiceVolume"],
+      "min": 0.5,
+      "max": 2.0,
+      "step": 0.1,
+      "controls": ["rangeSlider", "minusButton", "plusButton"],
+      "longPress": true
+    },
+    "mockControls": {
+      "purpose": "モック確認用。実画面の通常操作ではない",
+      "screen": "interview",
+      "states": ["回答待機", "録音中", "音声認識中", "回答分析中", "確認質問生成中"]
+    }
+  },
+  "screens": [
+    {
+      "id": "SCR-001",
+      "key": "login",
+      "name": "ログイン画面",
+      "purpose": "Google OAuthでログインし、初回利用者はプロフィール登録へ進む",
+      "primaryActions": ["Googleでログイン"]
+    },
+    {
+      "id": "SCR-002",
+      "key": "profile",
+      "name": "初期プロフィール登録画面",
+      "purpose": "面接確認質問と矛盾検出に利用する基本情報を登録する",
+      "primaryActions": ["保存して開始"],
+      "fields": ["氏名", "学歴区分", "学校名", "学部・学科", "卒業状況", "卒業年月", "職歴有無", "職歴", "希望職種", "自己PR素材"]
+    },
+    {
+      "id": "SCR-003",
+      "key": "home",
+      "name": "ホーム画面",
+      "purpose": "面接開始、履歴、設定への起点",
+      "primaryActions": ["面接練習を開始", "履歴を見る", "プロフィール設定"]
+    },
+    {
+      "id": "SCR-004",
+      "key": "condition",
+      "name": "面接条件設定画面",
+      "purpose": "面接種別、職種、テーマ、質問数を指定する",
+      "primaryActions": ["開始", "プロフィールを編集"],
+      "fields": ["面接種別", "職種", "業界", "企業名", "練習テーマ", "質問数"]
+    },
+    {
+      "id": "SCR-005",
+      "key": "interview",
+      "name": "面接実施画面",
+      "purpose": "AI面接官との音声会話を行う",
+      "primaryActions": ["質問を再生", "録音開始", "回答送信", "終了"],
+      "stateDisplays": ["質問数", "経過時間", "現在の状態", "VOICEVOX再生待ち", "会話履歴"],
+      "mockOnlyActions": ["回答待機", "録音中", "音声認識中", "回答分析中", "確認質問生成中"]
+    },
+    {
+      "id": "SCR-007",
+      "key": "feedback",
+      "name": "フィードバック画面",
+      "purpose": "抽象度、矛盾候補、深掘り不足、改善例を提示する",
+      "primaryActions": ["同じ条件でもう一度", "履歴に保存", "ホームへ"]
+    },
+    {
+      "id": "SCR-008/009",
+      "key": "history",
+      "name": "履歴画面",
+      "purpose": "過去の練習結果を一覧し、詳細を確認する",
+      "primaryActions": ["詳細"]
+    },
+    {
+      "id": "SCR-010/011",
+      "key": "settings",
+      "name": "設定画面",
+      "purpose": "プロフィールと音声設定を変更する",
+      "primaryActions": ["保存", "変更破棄", "試聴"],
+      "numberControls": ["話速", "音量"]
+    },
+    {
+      "id": "SCR-012",
+      "key": "recovery",
+      "name": "エラー・復旧画面",
+      "purpose": "音声、VOICEVOX、LLM、通信失敗時の継続導線を提示する",
+      "primaryActions": ["再録音", "テキスト入力へ切替", "面接を一時停止"]
+    }
+  ],
+  "approvedAt": "2026-07-10"
+}
