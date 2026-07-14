@@ -1,6 +1,15 @@
 name: Deploy backend to Cloud Run
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/backend/**"
+      - "packages/shared/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/deploy-backend.yml"
   push:
     branches:
       - main
@@ -18,14 +27,11 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  test-and-deploy:
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      IMAGE_URI: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPOSITORY }}/backend
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -38,6 +44,21 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE_URI: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPOSITORY }}/backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
