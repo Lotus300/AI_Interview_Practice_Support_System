@@ -3,6 +3,12 @@ const localDevelopmentApi = globalThis.location?.hostname === "localhost" && glo
   : "/api/v1";
 const apiBase = globalThis.INTERVIEW_API_BASE || localDevelopmentApi;
 
+export function resolveApiResource(path) {
+  if (!path || /^https?:\/\//.test(path)) return path;
+  if (/^https?:\/\//.test(apiBase)) return new URL(path, apiBase).toString();
+  return path;
+}
+
 export async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (options.body && !(options.body instanceof FormData)) headers["content-type"] = "application/json";

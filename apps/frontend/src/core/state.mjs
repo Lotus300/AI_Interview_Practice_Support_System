@@ -4,6 +4,7 @@ export const state = {
   user: null,
   profile: null,
   settings: null,
+  voiceSettingsDraft: null,
   sessions: [],
   session: null,
   question: null,
