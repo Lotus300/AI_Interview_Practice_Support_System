@@ -19,8 +19,18 @@ function list(items = []) {
   return `<ul class="feedback-list">${items.map(item => `<li><span>✓</span><p>${esc(item)}</p></li>`).join("")}</ul>`;
 }
 
+function feedbackEvidence(items = []) {
+  if (!items.length) return "";
+  return `<section class="card"><p class="eyebrow">EVIDENCE</p><h2>評価に使用した会話</h2><div class="conversation">${items.map(item => `<div class="utterance ai"><span>AI</span><p>${esc(item.questionText)}</p></div><div class="utterance user"><span>YOU</span><p>${esc(item.answerText)}</p></div>`).join("")}</div></section>`;
+}
+
+function renderNotAssessableFeedback(fb) {
+  return layout(`<section class="card feedback-summary"><p class="eyebrow">NOT ENOUGH ANSWERS</p><h2>今回は評価できませんでした</h2><p>${esc(fb.summary)}</p></section><section class="card"><p class="eyebrow coral-text">NEXT PRACTICE</p><h2>次回の練習ポイント</h2>${list(fb.abstractPoints)}</section><section class="card example"><p class="eyebrow">ABOUT FEEDBACK</p><h2>改善回答例について</h2><blockquote>${esc(fb.improvementExample)}</blockquote></section><div class="form-actions"><button data-screen="history">履歴を見る</button><button class="primary" data-screen="home">ホームへ戻る</button></div>`, { eyebrow: "FEEDBACK", title: "面接フィードバック" });
+}
+
 export function renderFeedback() {
   const fb = state.feedback;
+  if (fb?.assessmentStatus === "not_assessable") return renderNotAssessableFeedback(fb);
   if (!fb) return layout(`<section class="card loading-card"><div class="spinner"></div><p class="eyebrow">ANALYZING</p><h2>フィードバックを作成しています</h2><p>回答の具体性や一貫性を確認しています。通常は数秒で完了します。</p><button data-action="load-feedback" ${state.busy ? "disabled" : ""}>結果を確認</button></section>`, { eyebrow: "FEEDBACK", title: "面接フィードバック" });
-  return layout(`<section class="card feedback-summary"><p class="eyebrow">OVERALL REVIEW</p><h2>総評</h2><p>${esc(fb.summary)}</p></section><div class="feedback-grid"><section class="card"><p class="eyebrow green-text">GOOD POINTS</p><h2>良かった点</h2>${list(fb.goodPoints)}</section><section class="card"><p class="eyebrow coral-text">IMPROVEMENTS</p><h2>より伝わるために</h2>${list(fb.abstractPoints)}</section></div>${fb.contradictionCandidates?.length ? `<section class="card caution"><h2>確認しておきたい点</h2><p>矛盾と断定せず、本番前の確認候補として提示しています。</p>${list(fb.contradictionCandidates)}</section>` : ""}<section class="card example"><p class="eyebrow">ANSWER EXAMPLE</p><h2>改善回答例</h2><blockquote>${esc(fb.improvementExample)}</blockquote></section><div class="form-actions"><button data-screen="history">履歴を見る</button><button class="primary" data-screen="home">ホームへ戻る</button></div>`, { eyebrow: "FEEDBACK", title: "面接フィードバック" });
+  return layout(`<section class="card feedback-summary"><p class="eyebrow">OVERALL REVIEW</p><h2>総評</h2><p>${esc(fb.summary)}</p><small>評価対象：${Number(fb.evaluatedAnswerCount || 0)}件の回答</small></section><div class="feedback-grid"><section class="card"><p class="eyebrow green-text">GOOD POINTS</p><h2>良かった点</h2>${list(fb.goodPoints)}</section><section class="card"><p class="eyebrow coral-text">IMPROVEMENTS</p><h2>より伝わるために</h2>${list(fb.abstractPoints)}</section></div>${fb.contradictionCandidates?.length ? `<section class="card caution"><h2>確認しておきたい点</h2><p>矛盾と断定せず、本番前の確認候補として提示しています。</p>${list(fb.contradictionCandidates)}</section>` : ""}<section class="card example"><p class="eyebrow">ANSWER EXAMPLE</p><h2>改善回答例</h2><blockquote>${esc(fb.improvementExample)}</blockquote></section>${feedbackEvidence(fb.evidence)}<div class="form-actions"><button data-screen="history">履歴を見る</button><button class="primary" data-screen="home">ホームへ戻る</button></div>`, { eyebrow: "FEEDBACK", title: "面接フィードバック" });
 }
