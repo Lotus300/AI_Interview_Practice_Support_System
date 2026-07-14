@@ -1,6 +1,6 @@
 import { readJson, sendJson } from "../../http.mjs";
 import { getDataStore, nowIso } from "../../store.mjs";
-import { optionalText, requireText } from "../../core/validation.mjs";
+import { optionalText, requireChoice, requireText } from "../../core/validation.mjs";
 import { publicUser } from "../../core/resources.mjs";
 
 export function registerProfileRoutes(router) {
@@ -13,7 +13,7 @@ export function registerProfileRoutes(router) {
       fullName: requireText(body.fullName, "氏名", 100),
       education: requireText(body.education, "学歴", 300),
       faculty: optionalText(body.faculty, 200),
-      graduationStatus: optionalText(body.graduationStatus, 100),
+      graduationStatus: requireChoice(body.graduationStatus, "卒業状況", ["卒業", "卒業見込み"]),
       workHistory: optionalText(body.workHistory, 4000),
       desiredRole: optionalText(body.desiredRole, 100),
       selfPr: optionalText(body.selfPr, 4000),

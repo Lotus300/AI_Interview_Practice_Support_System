@@ -14,10 +14,12 @@ export function textarea(name, label, value = "", attributes = "") {
   return `<label class="field"><span>${esc(label)}</span><textarea name="${name}" ${attributes}>${esc(value)}</textarea></label>`;
 }
 
-export function select(name, label, value, options) {
-  return `<label class="field"><span>${esc(label)}</span><select name="${name}">${options.map((item) => {
-    const option = typeof item === "string" ? item : item.label;
-    return `<option value="${esc(option)}" ${option === value ? "selected" : ""}>${esc(option)}</option>`;
+export function select(name, label, value, options, attributes = "") {
+  return `<label class="field"><span>${esc(label)}</span><select name="${name}" ${attributes}>${options.map((item) => {
+    const optionValue = typeof item === "string" ? item : (item.value ?? item.label);
+    const optionLabel = typeof item === "string" ? item : item.label;
+    const disabled = typeof item === "object" && item.disabled ? "disabled" : "";
+    return `<option value="${esc(optionValue)}" ${optionValue === value ? "selected" : ""} ${disabled}>${esc(optionLabel)}</option>`;
   }).join("")}</select></label>`;
 }
 

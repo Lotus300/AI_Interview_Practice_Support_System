@@ -1,5 +1,5 @@
 import { state } from "../core/state.mjs";
-import { esc, field, textarea } from "../core/html.mjs";
+import { esc, field, select, textarea } from "../core/html.mjs";
 import { layout } from "./layout.mjs";
 
 export function renderLogin() {
@@ -8,7 +8,7 @@ export function renderLogin() {
 
 function profileForm(initialSetup) {
   const p = state.profile || {};
-  return `<form data-form="profile" class="form-stack"><section class="card"><div class="card-heading"><div class="section-icon">01</div><div><h2>基本情報</h2><p>面接官があなたを呼ぶ際の情報です。</p></div></div><div class="form-grid">${field("fullName", "氏名（必須）", p.fullName, "text", "required maxlength=100")}${field("desiredRole", "希望職種", p.desiredRole, "text", "maxlength=100")}</div></section><section class="card"><div class="card-heading"><div class="section-icon">02</div><div><h2>学歴・経歴</h2><p>質問の背景情報として利用します。</p></div></div><div class="form-grid">${field("education", "学校名・最終学歴（必須）", p.education, "text", "required")}${field("faculty", "学部・学科", p.faculty)}${field("graduationStatus", "卒業状況", p.graduationStatus)}</div>${textarea("workHistory", "職歴・活動経験", p.workHistory, "placeholder='所属、役割、期間、担当内容を入力してください'")}</section><section class="card"><div class="card-heading"><div class="section-icon">03</div><div><h2>自己PR素材</h2><p>得意なことや成果を登録すると、より具体的な質問になります。</p></div></div>${textarea("selfPr", "強み・実績・エピソード", p.selfPr, "placeholder='状況・行動・結果が分かるように入力してください'")}</section><div class="form-actions">${initialSetup ? "" : '<button type="button" data-screen="home">キャンセル</button>'}<button class="primary" ${state.busy ? "disabled" : ""}>${initialSetup ? "保存してホームへ" : "変更を保存"}</button></div></form>`;
+  return `<form data-form="profile" class="form-stack"><section class="card"><div class="card-heading"><div class="section-icon">01</div><div><h2>基本情報</h2><p>面接官があなたを呼ぶ際の情報です。</p></div></div><div class="form-grid">${field("fullName", "氏名（必須）", p.fullName, "text", "required maxlength=100")}${field("desiredRole", "希望職種", p.desiredRole, "text", "maxlength=100")}</div></section><section class="card"><div class="card-heading"><div class="section-icon">02</div><div><h2>学歴・経歴</h2><p>質問の背景情報として利用します。</p></div></div><div class="form-grid">${field("education", "学校名・最終学歴（必須）", p.education, "text", "required")}${field("faculty", "学部・学科", p.faculty)}${select("graduationStatus", "卒業状況（必須）", p.graduationStatus || "", [{ value: "", label: "選択してください", disabled: true }, "卒業", "卒業見込み"], "required")}</div>${textarea("workHistory", "職歴・活動経験", p.workHistory, "placeholder='所属、役割、期間、担当内容を入力してください'")}</section><section class="card"><div class="card-heading"><div class="section-icon">03</div><div><h2>自己PR素材</h2><p>得意なことや成果を登録すると、より具体的な質問になります。</p></div></div>${textarea("selfPr", "強み・実績・エピソード", p.selfPr, "placeholder='状況・行動・結果が分かるように入力してください'")}</section><div class="form-actions">${initialSetup ? "" : '<button type="button" data-screen="home">キャンセル</button>'}<button class="primary" ${state.busy ? "disabled" : ""}>${initialSetup ? "保存してホームへ" : "変更を保存"}</button></div></form>`;
 }
 
 export function renderProfile() {
