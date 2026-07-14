@@ -66,3 +66,37 @@ test("VOICEVOX障害時はテキスト表示へフォールバックする", asy
   assert.equal(result.aiResponseStatus, "text_only");
   assert.equal(result.reason, "VOICEVOX_UNAVAILABLE");
 });
+
+test("定型試聴は標準設定で一度だけ合成し、速度と音量をクライアント調整にする", async () => {
+  const calls = [];
+  const client = {
+    configured: true,
+    async createAudioQuery(input) {
+      calls.push(["query", input]);
+      return { speedScale: 0, volumeScale: 0 };
+    },
+    async synthesize(input) {
+      calls.push(["synthesis", input]);
+      return wavFixture(1000);
+    }
+  };
+  const service = createVoiceService({ client, logger: { error() {} } });
+  const input = {
+    text: "これから面接を開始します。名前と経歴または学歴をお願いします。",
+    speaker: "青山龍星",
+    speedScale: 1.8,
+    volumeScale: 1.6,
+    preview: true
+  };
+  const [first, second] = await Promise.all([
+    service.synthesize({ ...input, userId: "user-1" }),
+    service.synthesize({ ...input, userId: "user-2" })
+  ]);
+
+  assert.equal(calls.filter(([type]) => type === "query").length, 1);
+  assert.equal(calls.filter(([type]) => type === "synthesis").length, 1);
+  assert.equal(calls[1][1].audioQuery.speedScale, 1);
+  assert.equal(calls[1][1].audioQuery.volumeScale, 1);
+  assert.equal(first.playbackAdjustment, "client");
+  assert.equal(second.playbackAdjustment, "client");
+});

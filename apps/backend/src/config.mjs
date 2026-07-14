@@ -20,7 +20,9 @@ export const config = {
     defaultSpeakerId: Number(process.env.VOICEVOX_DEFAULT_SPEAKER_ID || 13),
     timeoutMs: Number(process.env.VOICEVOX_TIMEOUT_MS || 60000),
     cacheTtlMs: Number(process.env.VOICEVOX_CACHE_TTL_MS || 120000),
-    maxCacheEntries: Number(process.env.VOICEVOX_MAX_CACHE_ENTRIES || 20)
+    maxCacheEntries: Number(process.env.VOICEVOX_MAX_CACHE_ENTRIES || 20),
+    previewCacheTtlMs: Number(process.env.VOICEVOX_PREVIEW_CACHE_TTL_MS || 3600000),
+    previewCacheMaxEntries: Number(process.env.VOICEVOX_PREVIEW_CACHE_MAX_ENTRIES || 20)
   }
 };
 

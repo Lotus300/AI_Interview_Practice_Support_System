@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { previewTextForControl, readVoiceSettings, voicePreviewTexts } from "../../frontend/src/features/voice-preview.mjs";
+import { previewTextForControl, readVoiceSettings, voicePreviewText, voicePreviewTexts } from "../../frontend/src/features/voice-preview.mjs";
 
 test("音声設定ごとに適切な試聴文を返す", () => {
-  assert.equal(previewTextForControl("speaker"), "これから面接を開始します。名前と経歴または学歴をお願いします。");
-  assert.equal(previewTextForControl("speedScale"), "話す速度を調整しています。");
-  assert.equal(previewTextForControl("volumeScale"), "音量の調整をしています。");
+  assert.equal(previewTextForControl("speaker"), voicePreviewText);
+  assert.equal(previewTextForControl("speedScale"), voicePreviewText);
+  assert.equal(previewTextForControl("volumeScale"), voicePreviewText);
   assert.equal(previewTextForControl("unknown"), null);
   assert.equal(voicePreviewTexts.speaker.includes("面接を開始"), true);
 });
