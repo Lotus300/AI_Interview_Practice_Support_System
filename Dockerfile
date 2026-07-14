@@ -5,6 +5,11 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
+RUN corepack enable
+
+COPY --chown=node:node package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
+
 COPY --chown=node:node apps/backend ./apps/backend
 COPY --chown=node:node apps/frontend ./apps/frontend
 COPY --chown=node:node packages/shared ./packages/shared

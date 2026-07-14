@@ -1,4 +1,4 @@
-import { db, createId, nowIso } from "../../store.mjs";
+import { createId, getDataStore, nowIso } from "../../store.mjs";
 import { feedbackStatuses } from "../../../../../packages/shared/src/constants.mjs";
 
 export function createFeedback(session) {
@@ -16,18 +16,21 @@ export function createFeedback(session) {
   };
 }
 
-export function finishFeedbackJob(jobId) {
-  const job = db.jobs.get(jobId);
+export async function finishFeedbackJob(jobId) {
+  const store = await getDataStore();
+  const job = await store.getJob(jobId);
   if (!job) return null;
-  const session = db.sessions.get(job.sessionId);
+  const session = await store.getSession(job.sessionId);
   if (!session) {
     Object.assign(job, { status: feedbackStatuses.FAILED, errorMessage: "Session not found", updatedAt: nowIso() });
+    await store.saveJob(job);
     return job;
   }
   Object.assign(job, { status: feedbackStatuses.RUNNING, updatedAt: nowIso() });
   const feedback = createFeedback(session);
-  db.feedbacks.set(session.id, feedback);
+  feedback.userId = job.userId;
   Object.assign(session, { feedbackStatus: feedbackStatuses.SUCCEEDED, updatedAt: nowIso() });
   Object.assign(job, { status: feedbackStatuses.SUCCEEDED, result: { sessionId: session.id, feedbackId: feedback.id }, updatedAt: nowIso() });
+  await Promise.all([store.saveFeedback(feedback), store.saveSession(session), store.saveJob(job)]);
   return job;
 }

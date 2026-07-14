@@ -71,7 +71,7 @@ export function createServer({ router = buildRouter() } = {}) {
       }
 
       const cookies = parseCookies(req.headers.cookie);
-      const user = matched.entry.auth ? findUserBySession(cookies[config.sessionCookieName]) : null;
+      const user = matched.entry.auth ? await findUserBySession(cookies[config.sessionCookieName]) : null;
       if (matched.entry.auth && !user) return sendJson(res, 401, { code: "UNAUTHORIZED", message: "Login required" });
       await matched.entry.handler(req, res, { user }, matched.params);
     } catch (error) {

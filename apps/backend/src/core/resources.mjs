@@ -1,4 +1,4 @@
-import { db } from "../store.mjs";
+import { getDataStore } from "../store.mjs";
 
 export function publicUser(user) {
   return {
@@ -9,8 +9,8 @@ export function publicUser(user) {
   };
 }
 
-export function findOwnedSession(sessionId, userId) {
-  const session = db.sessions.get(sessionId);
+export async function findOwnedSession(sessionId, userId) {
+  const session = await (await getDataStore()).getSession(sessionId);
   if (!session || session.deletedAt) return { error: [404, "NOT_FOUND", "Interview session not found"] };
   if (session.userId !== userId) return { error: [403, "FORBIDDEN", "Interview session does not belong to user"] };
   return { session };

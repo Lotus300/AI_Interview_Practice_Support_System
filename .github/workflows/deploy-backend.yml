@@ -9,6 +9,9 @@ on:
       - "apps/frontend/**"
       - "packages/shared/**"
       - "Dockerfile"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".dockerignore"
       - ".github/workflows/deploy-backend.yml"
   push:
@@ -19,6 +22,9 @@ on:
       - "apps/frontend/**"
       - "packages/shared/**"
       - "Dockerfile"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".dockerignore"
       - ".github/workflows/deploy-backend.yml"
   workflow_dispatch:
@@ -44,8 +50,13 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile --ignore-scripts
+
       - name: Run tests
-        run: npm test
+        run: pnpm test
 
   deploy:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
@@ -79,7 +90,7 @@ jobs:
           docker build --tag "${IMAGE_URI}:${GITHUB_SHA}" .
           docker push "${IMAGE_URI}:${GITHUB_SHA}"
 
-      - name: Deploy private Cloud Run service
+      - name: Deploy Cloud Run service
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
         with:
@@ -89,6 +100,8 @@ jobs:
           image: ${{ env.IMAGE_URI }}:${{ github.sha }}
           env_vars: |-
             NODE_ENV=production
+            DATA_STORE=firestore
+            GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}
             FIRESTORE_DATABASE_ID=(default)
           secrets: |-
             SESSION_SECRET=session-secret:1
