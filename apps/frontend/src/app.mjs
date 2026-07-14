@@ -1,7 +1,8 @@
-import { api, interviewApi } from "./core/api.mjs";
+import { api, interviewApi, resolveApiResource } from "./core/api.mjs";
 import { clearInterviewState, notify, state } from "./core/state.mjs";
 import { hasClickCommand } from "./core/events.mjs";
 import { disposeRecording, startRecording, stopRecording } from "./features/recording.mjs";
+import { previewTextForControl, readVoiceSettings, voicePreviewTexts } from "./features/voice-preview.mjs";
 import { render } from "./views/index.mjs";
 
 async function refreshMe() {
@@ -20,9 +21,13 @@ async function refreshMe() {
 
 async function navigate(screen) {
   state.drawerOpen = false;
+  if (screen !== "settings") state.voiceSettingsDraft = null;
   if (screen === "history" || screen === "home") state.sessions = (await interviewApi.list()).sessions;
   if (screen === "profile") state.profile = (await api("/profile")).profile;
-  if (screen === "settings") state.settings = (await api("/settings")).settings;
+  if (screen === "settings") {
+    state.settings = (await api("/settings")).settings;
+    state.voiceSettingsDraft = { ...state.settings };
+  }
   state.screen = screen;
 }
 
@@ -41,13 +46,24 @@ async function handleLogout() {
   disposeRecording();
   await api("/auth/logout", { method: "POST" });
   clearInterviewState();
-  Object.assign(state, { user: null, profile: null, settings: null, sessions: [], screen: "login", drawerOpen: false });
+  Object.assign(state, { user: null, profile: null, settings: null, voiceSettingsDraft: null, sessions: [], screen: "login", drawerOpen: false });
 }
 
-async function synthesizeVoice(preview = false) {
-  const text = preview ? "こんにちは。面接官を担当します。" : state.question?.text;
-  const data = await api("/voice/synthesize", { method: "POST", body: JSON.stringify({ text, ...state.settings }) });
-  notify(data.aiResponseStatus === "text_only" ? "音声エンジン未接続のため、テキスト表示で続けます。" : "音声を再生しています。", "info");
+let activeVoiceAudio = null;
+
+async function synthesizeVoice(text, settings = state.settings) {
+  if (!text) return;
+  const data = await api("/voice/synthesize", { method: "POST", body: JSON.stringify({ text, ...settings }) });
+  if (data.aiResponseStatus === "text_only") {
+    notify("音声エンジン未接続のため、テキスト表示で続けます。", "info");
+    return;
+  }
+  if (data.voice?.playbackUrl) {
+    activeVoiceAudio?.pause();
+    activeVoiceAudio = new Audio(resolveApiResource(data.voice.playbackUrl));
+    await activeVoiceAudio.play();
+  }
+  notify("音声を再生しています。", "info");
 }
 
 async function submitAnswer() {
@@ -121,8 +137,8 @@ const actionHandlers = {
   "clear-message": async () => { state.message = ""; },
   login: handleLogin,
   logout: handleLogout,
-  voice: () => synthesizeVoice(false),
-  "preview-voice": () => synthesizeVoice(true),
+  voice: () => synthesizeVoice(state.question?.text),
+  "preview-voice": (target) => synthesizeVoice(voicePreviewTexts.speaker, readVoiceSettings(target.form, state.voiceSettingsDraft || state.settings)),
   "start-recording": () => startRecording(render),
   "stop-recording": () => stopRecording(render),
   "submit-answer": submitAnswer,
@@ -141,6 +157,22 @@ document.addEventListener("input", event => {
   }
   if (event.target.name === "speedScale") document.querySelector("#speedOutput").value = Number(event.target.value).toFixed(1);
   if (event.target.name === "volumeScale") document.querySelector("#volumeOutput").value = Number(event.target.value).toFixed(1);
+  if (["speedScale", "volumeScale"].includes(event.target.name)) {
+    state.voiceSettingsDraft = { ...state.voiceSettingsDraft, ...readVoiceSettings(event.target.form, state.voiceSettingsDraft || state.settings) };
+  }
+});
+
+document.addEventListener("change", async event => {
+  const text = previewTextForControl(event.target.name);
+  if (!text || state.screen !== "settings") return;
+  const settings = readVoiceSettings(event.target.form, state.voiceSettingsDraft || state.settings);
+  state.voiceSettingsDraft = { ...state.voiceSettingsDraft, ...settings };
+  try {
+    await synthesizeVoice(text, settings);
+  } catch (error) {
+    notify(error.message, "error");
+  }
+  render();
 });
 
 document.addEventListener("keydown", event => {
@@ -186,6 +218,7 @@ document.addEventListener("submit", async event => {
     }
     if (form.dataset.form === "settings") {
       state.settings = (await api("/settings", { method: "PUT", body: JSON.stringify(values) })).settings;
+      state.voiceSettingsDraft = null;
       state.screen = "home";
       notify("音声設定を保存しました。", "success");
     }
