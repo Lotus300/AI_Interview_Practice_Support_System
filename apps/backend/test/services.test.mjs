@@ -13,7 +13,7 @@ import { feedbackStatuses } from "../../../packages/shared/src/constants.mjs";
 
 test.beforeEach(() => resetDb());
 
-test("初回質問はプロフィールと職種を反映する", async () => {
+test("初回質問へプロフィールと職種を反映する", async () => {
   const session = await seedInterviewSession("usr_test", { jobRole: "データエンジニア" });
   const question = createInitialQuestion({ fullName: "山田 花子" }, session);
   assert.match(question.text, /山田 花子さん/);
@@ -29,24 +29,53 @@ test("短く数値のない回答は深掘り対象になる", () => {
   assert.equal(createNextQuestion(analysis, { condition: {} }).type, "deep_dive");
 });
 
-test("具体的な回答からフィードバックを生成できる", async () => {
+test("実際の質問と回答からフィードバックを生成する", async () => {
   const session = await seedInterviewSession("usr_test", { theme: "総合面接" });
-  const analysis = analyzeAnswer({}, session, "問い合わせ集計を自動化し、月6時間の削減を実現しました。関係者3名と手順を整理して導入しました。");
-  session.answers.push({ analysis });
-  appendUtterance(session, "user", "回答", "answer");
+  const answerText = "問い合わせ集計を自動化し、月6時間の削減を実現しました。関係者5名と手順を整理して導入しました。";
+  const analysis = analyzeAnswer({}, session, answerText);
+  const question = { id: "q_test", text: "業務改善の経験を教えてください。" };
+  session.questions.push(question);
+  session.answers.push({ id: "ans_test", questionId: question.id, text: answerText, analysis });
+  appendUtterance(session, "user", answerText, "answer");
+
   const feedback = createFeedback(session);
   assert.equal(feedback.sessionId, session.id);
-  assert.ok(feedback.goodPoints.length >= 1);
+  assert.equal(feedback.assessmentStatus, "assessed");
+  assert.equal(feedback.evaluatedAnswerCount, 1);
+  assert.equal(feedback.evidence[0].questionText, question.text);
+  assert.match(feedback.evidence[0].answerText, /月6時間/);
+  assert.match(feedback.summary, /1件の回答/);
+  assert.ok(feedback.goodPoints.some(item => item.includes("数値")));
   assert.equal(session.utterances[0].sequenceNo, 1);
 });
 
-test("フィードバックジョブは完了状態と結果を保存する", async () => {
+test("無回答では会話内容を推測せず評価不能にする", async () => {
   const session = await seedInterviewSession("usr_test", { theme: "総合面接" });
-  session.answers.push({ analysis: { abstractHints: [], contradictionCandidates: [] } });
+  session.questions.push({ id: "q_test", text: "自己紹介をしてください。" });
+  appendUtterance(session, "ai", "自己紹介をしてください。", "fixed_profile_check");
+
+  const feedback = createFeedback(session);
+  assert.equal(feedback.assessmentStatus, "not_assessable");
+  assert.equal(feedback.evaluatedAnswerCount, 0);
+  assert.deepEqual(feedback.goodPoints, []);
+  assert.deepEqual(feedback.evidence, []);
+  assert.match(feedback.summary, /回答が1件も送信されていない/);
+  assert.doesNotMatch(feedback.summary, /経験の流れは伝わ/);
+});
+
+test("フィードバックジョブは実回答に基づく結果を保存する", async () => {
+  const session = await seedInterviewSession("usr_test", { theme: "総合面接" });
+  session.answers.push({
+    id: "ans_test",
+    text: "業務改善に取り組みました。",
+    analysis: { abstractHints: [], contradictionCandidates: [] }
+  });
+  await (await getDataStore()).saveSession(session);
   db.jobs.set("job_test", { id: "job_test", sessionId: session.id, status: feedbackStatuses.QUEUED });
+
   const job = await finishFeedbackJob("job_test");
   assert.equal(job.status, feedbackStatuses.SUCCEEDED);
   const store = await getDataStore();
   assert.equal((await store.getSession(session.id)).feedbackStatus, feedbackStatuses.SUCCEEDED);
-  assert.equal((await store.getFeedback(session.id)).sessionId, session.id);
+  assert.equal((await store.getFeedback(session.id)).assessmentStatus, "assessed");
 });
