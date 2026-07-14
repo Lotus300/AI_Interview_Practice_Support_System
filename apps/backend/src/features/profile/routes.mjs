@@ -1,10 +1,10 @@
 import { readJson, sendJson } from "../../http.mjs";
-import { db, nowIso } from "../../store.mjs";
+import { getDataStore, nowIso } from "../../store.mjs";
 import { optionalText, requireText } from "../../core/validation.mjs";
 import { publicUser } from "../../core/resources.mjs";
 
 export function registerProfileRoutes(router) {
-  router.add("GET", "/api/v1/profile", async (_req, res, ctx) => sendJson(res, 200, { profile: db.profiles.get(ctx.user.id) ?? null }));
+  router.add("GET", "/api/v1/profile", async (_req, res, ctx) => sendJson(res, 200, { profile: await (await getDataStore()).getProfile(ctx.user.id) }));
 
   router.add("PUT", "/api/v1/profile", async (req, res, ctx) => {
     const body = await readJson(req);
@@ -19,9 +19,10 @@ export function registerProfileRoutes(router) {
       selfPr: optionalText(body.selfPr, 4000),
       updatedAt: nowIso()
     };
-    db.profiles.set(ctx.user.id, profile);
-    ctx.user.profileCompleted = true;
-    ctx.user.updatedAt = nowIso();
+    const store = await getDataStore();
+    await store.saveProfile(profile);
+    Object.assign(ctx.user, { profileCompleted: true, updatedAt: nowIso() });
+    await store.saveUser(ctx.user);
     sendJson(res, 200, { profile, user: publicUser(ctx.user) });
   });
 }

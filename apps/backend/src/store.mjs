@@ -1,20 +1,25 @@
 import crypto from "node:crypto";
 import { defaultVoiceSettings, feedbackStatuses, sessionStatuses } from "../../../packages/shared/src/constants.mjs";
 import { config } from "./config.mjs";
+import { createFirestoreDataStore, MemoryDataStore } from "./data-store.mjs";
 
-export const db = {
-  users: new Map(),
-  sessions: new Map(),
-  authSessions: new Map(),
-  oauthStates: new Map(),
-  profiles: new Map(),
-  settings: new Map(),
-  jobs: new Map(),
-  feedbacks: new Map()
-};
+const memoryStore = new MemoryDataStore();
+let storePromise;
+
+export const db = memoryStore.collections;
+
+export function getDataStore() {
+  if (!storePromise) {
+    storePromise = config.dataStore === "firestore"
+      ? createFirestoreDataStore({ projectId: config.gcpProjectId, databaseId: config.firestoreDatabaseId })
+      : Promise.resolve(memoryStore);
+  }
+  return storePromise;
+}
 
 export function resetDb() {
-  for (const collection of Object.values(db)) collection.clear();
+  memoryStore.reset();
+  if (config.dataStore !== "firestore") storePromise = Promise.resolve(memoryStore);
 }
 
 export function createId(prefix) {
@@ -22,118 +27,81 @@ export function createId(prefix) {
 }
 
 export function hashSessionId(sessionId) {
-  return crypto
-    .createHmac("sha256", config.sessionSecret)
-    .update(sessionId)
-    .digest("hex");
+  return crypto.createHmac("sha256", config.sessionSecret).update(sessionId).digest("hex");
 }
 
-export function nowIso() {
-  return new Date().toISOString();
-}
+export function nowIso() { return new Date().toISOString(); }
 
-export function ensureDemoUser() {
+export async function ensureDemoUser() {
+  const store = await getDataStore();
   const userId = "usr_demo";
-  if (!db.users.has(userId)) {
-    db.users.set(userId, {
-      id: userId,
-      googleSub: "demo-google-sub",
-      email: "demo@example.com",
-      name: "デモユーザ",
-      profileCompleted: false,
-      createdAt: nowIso(),
-      updatedAt: nowIso()
-    });
-    db.settings.set(userId, { ...defaultVoiceSettings, updatedAt: nowIso() });
-  }
-  return db.users.get(userId);
-}
-
-export function findOrCreateGoogleUser(googleProfile) {
-  const existing = [...db.users.values()].find((user) => user.googleSub === googleProfile.googleSub);
-  if (existing) {
-    existing.email = googleProfile.email;
-    existing.name = googleProfile.name;
-    existing.updatedAt = nowIso();
-    return existing;
-  }
-
-  const userId = createId("usr");
-  const user = {
-    id: userId,
-    googleSub: googleProfile.googleSub,
-    email: googleProfile.email,
-    name: googleProfile.name,
-    profileCompleted: false,
-    createdAt: nowIso(),
-    updatedAt: nowIso()
-  };
-  db.users.set(userId, user);
-  db.settings.set(userId, { ...defaultVoiceSettings, updatedAt: nowIso() });
+  const existing = await store.getUser(userId);
+  if (existing) return existing;
+  const timestamp = nowIso();
+  const user = { id: userId, googleSub: "demo-google-sub", email: "demo@example.com", name: "デモユーザ", profileCompleted: false, createdAt: timestamp, updatedAt: timestamp };
+  await Promise.all([
+    store.saveUser(user),
+    store.saveSettings({ userId, ...defaultVoiceSettings, saveAudio: false, updatedAt: timestamp })
+  ]);
   return user;
 }
 
-export function createSessionForUser(userId) {
+export async function findOrCreateGoogleUser(googleProfile) {
+  const store = await getDataStore();
+  const existing = await store.findUserByGoogleSub(googleProfile.googleSub);
+  if (existing) {
+    const updated = { ...existing, email: googleProfile.email, name: googleProfile.name, lastLoginAt: nowIso(), updatedAt: nowIso() };
+    return store.saveUser(updated);
+  }
+  const timestamp = nowIso();
+  const user = { id: createId("usr"), ...googleProfile, profileCompleted: false, lastLoginAt: timestamp, createdAt: timestamp, updatedAt: timestamp };
+  await Promise.all([
+    store.saveUser(user),
+    store.saveSettings({ userId: user.id, ...defaultVoiceSettings, saveAudio: false, updatedAt: timestamp })
+  ]);
+  return user;
+}
+
+export async function createSessionForUser(userId) {
+  const store = await getDataStore();
   const sessionId = createId("auth");
   const sessionIdHash = hashSessionId(sessionId);
-  db.authSessions.set(sessionIdHash, {
-    id: createId("authdoc"),
-    sessionIdHash,
-    userId,
-    createdAt: nowIso(),
-    expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-    revokedAt: null
+  await store.saveAuthSession({
+    id: sessionIdHash, sessionIdHash, userId, createdAt: nowIso(),
+    expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), revokedAt: null
   });
   return sessionId;
 }
 
-export function findUserBySession(sessionId) {
+export async function findUserBySession(sessionId) {
   if (!sessionId) return null;
-  const session = db.authSessions.get(hashSessionId(sessionId));
-  if (!session || session.revokedAt) return null;
-  if (Date.parse(session.expiresAt) < Date.now()) return null;
-  return db.users.get(session.userId) ?? null;
+  const store = await getDataStore();
+  const session = await store.getAuthSession(hashSessionId(sessionId));
+  if (!session || session.revokedAt || Date.parse(session.expiresAt) < Date.now()) return null;
+  return store.getUser(session.userId);
 }
 
-export function revokeSession(sessionId) {
+export async function revokeSession(sessionId) {
   if (!sessionId) return;
-  const session = db.authSessions.get(hashSessionId(sessionId));
-  if (session) session.revokedAt = nowIso();
+  const store = await getDataStore();
+  await store.revokeAuthSession(hashSessionId(sessionId), nowIso());
 }
 
-export function saveOAuthState(state) {
-  db.oauthStates.set(state, {
-    state,
-    createdAt: nowIso(),
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-    usedAt: null
-  });
+export async function saveOAuthState(state) {
+  const store = await getDataStore();
+  await store.saveOAuthState({ state, createdAt: nowIso(), expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), usedAt: null });
 }
 
-export function consumeOAuthState(state) {
-  const item = db.oauthStates.get(state);
-  if (!item || item.usedAt) return false;
-  if (Date.parse(item.expiresAt) < Date.now()) return false;
-  item.usedAt = nowIso();
-  return true;
+export async function consumeOAuthState(state) {
+  return (await getDataStore()).consumeOAuthState(state, nowIso());
 }
 
-export function seedInterviewSession(userId, condition) {
-  const sessionId = createId("ses");
+export async function seedInterviewSession(userId, condition) {
+  const timestamp = nowIso();
   const session = {
-    id: sessionId,
-    userId,
-    status: sessionStatuses.CREATED,
-    condition,
-    questions: [],
-    answers: [],
-    utterances: [],
-    feedbackStatus: feedbackStatuses.NOT_STARTED,
-    createdAt: nowIso(),
-    updatedAt: nowIso(),
-    finishedAt: null,
-    deletedAt: null
+    id: createId("ses"), userId, status: sessionStatuses.CREATED, condition,
+    questions: [], answers: [], utterances: [], feedbackStatus: feedbackStatuses.NOT_STARTED,
+    createdAt: timestamp, updatedAt: timestamp, finishedAt: null, deletedAt: null
   };
-  db.sessions.set(sessionId, session);
-  return session;
+  return (await getDataStore()).saveSession(session);
 }
