@@ -1,3 +1,5 @@
+import { config } from "./config.mjs";
+
 export async function readJson(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -30,25 +32,26 @@ export function parseCookies(cookieHeader = "") {
       .filter(Boolean)
       .map((part) => {
         const index = part.indexOf("=");
+        if (index < 1) return [part, ""];
         return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
       })
   );
 }
 
 export function setSessionCookie(sessionId) {
-  return `interview_session=${encodeURIComponent(sessionId)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600`;
+  return `${config.sessionCookieName}=${encodeURIComponent(sessionId)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600${config.secureCookies ? "; Secure" : ""}`;
 }
 
 export function clearSessionCookie() {
-  return "interview_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+  return `${config.sessionCookieName}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${config.secureCookies ? "; Secure" : ""}`;
 }
 
 export function setOAuthStateCookie(state) {
-  return `interview_oauth_state=${encodeURIComponent(state)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600`;
+  return `${config.oauthStateCookieName}=${encodeURIComponent(state)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600${config.secureCookies ? "; Secure" : ""}`;
 }
 
 export function clearOAuthStateCookie() {
-  return "interview_oauth_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+  return `${config.oauthStateCookieName}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${config.secureCookies ? "; Secure" : ""}`;
 }
 
 export function route(method, pathname, pattern) {

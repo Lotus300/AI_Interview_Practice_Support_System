@@ -7,9 +7,15 @@ export const speakerOptions = [
 
 export const sessionStatuses = {
   CREATED: "created",
+  QUESTION_GENERATING: "question_generating",
   QUESTION_PRESENTED: "question_presented",
   WAITING_ANSWER: "waiting_answer",
+  RECORDING: "recording",
+  SPEECH_RECOGNIZING: "speech_recognizing",
+  ANSWER_CONFIRMING: "answer_confirming",
   ANSWER_ANALYZING: "answer_analyzing",
+  NEXT_QUESTION_GENERATING: "next_question_generating",
+  FINISH_CONFIRMING: "finish_confirming",
   FINISHED: "finished"
 };
 
