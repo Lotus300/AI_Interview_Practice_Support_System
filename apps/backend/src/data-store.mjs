@@ -28,9 +28,9 @@ export class MemoryDataStore {
   async saveOAuthState(item) { this.collections.oauthStates.set(item.state, clone(item)); }
   async consumeOAuthState(state, usedAt) {
     const item = this.collections.oauthStates.get(state);
-    if (!item || item.usedAt || Date.parse(item.expiresAt) < Date.now()) return false;
+    if (!item || item.usedAt || Date.parse(item.expiresAt) < Date.now()) return null;
     item.usedAt = usedAt;
-    return true;
+    return clone(item);
   }
   async getProfile(userId) { return clone(this.collections.profiles.get(userId) ?? null); }
   async saveProfile(profile) { this.collections.profiles.set(profile.userId, clone(profile)); return clone(profile); }
@@ -123,9 +123,9 @@ export async function createFirestoreDataStore({ projectId, databaseId = "(defau
       return firestore.runTransaction(async transaction => {
         const snapshot = await transaction.get(ref);
         const item = snapshot.exists ? fromFirestore(snapshot.data()) : null;
-        if (!item || item.usedAt || Date.parse(item.expiresAt) < Date.now()) return false;
+        if (!item || item.usedAt || Date.parse(item.expiresAt) < Date.now()) return null;
         transaction.update(ref, { usedAt: toFirestore(usedAt, "usedAt") });
-        return true;
+        return item;
       });
     },
     async getProfile(userId) { return document("profiles", userId); },

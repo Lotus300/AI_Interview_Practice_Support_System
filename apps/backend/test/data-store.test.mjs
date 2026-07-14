@@ -14,8 +14,8 @@ test("メモリRepositoryは保存値を外部変更から分離する", async (
 test("OAuth stateは期限内でも一度だけ消費できる", async () => {
   const store = new MemoryDataStore();
   await store.saveOAuthState({ state: "state_1", expiresAt: new Date(Date.now() + 60_000).toISOString(), usedAt: null });
-  assert.equal(await store.consumeOAuthState("state_1", new Date().toISOString()), true);
-  assert.equal(await store.consumeOAuthState("state_1", new Date().toISOString()), false);
+  assert.equal((await store.consumeOAuthState("state_1", new Date().toISOString())).state, "state_1");
+  assert.equal(await store.consumeOAuthState("state_1", new Date().toISOString()), null);
 });
 
 test("面接一覧は所有者・論理削除・作成日時を反映する", async () => {

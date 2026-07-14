@@ -104,8 +104,12 @@ jobs:
             DATA_STORE=firestore
             GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}
             FIRESTORE_DATABASE_ID=(default)
+            APP_ORIGIN=${{ vars.APP_ORIGIN }}
+            GOOGLE_OAUTH_REDIRECT_URI=${{ vars.APP_ORIGIN }}/api/v1/auth/google/callback
           secrets: |-
             SESSION_SECRET=session-secret:1
+            GOOGLE_OAUTH_CLIENT_ID=google-oauth-client-id:1
+            GOOGLE_OAUTH_CLIENT_SECRET=google-oauth-client-secret:1
           flags: >-
             --service-account=${{ vars.CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
             --port=8080

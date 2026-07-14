@@ -1,20 +1,27 @@
 import crypto from "node:crypto";
+import { OAuth2Client } from "google-auth-library";
 import { config } from "./config.mjs";
 
 const googleAuthEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
 const googleTokenEndpoint = "https://oauth2.googleapis.com/token";
+const googleOAuthClient = new OAuth2Client(config.googleOAuth.clientId);
 
 export function createOAuthState() {
   return crypto.randomBytes(24).toString("base64url");
 }
 
-export function buildGoogleAuthUrl(state) {
+export function createOAuthNonce() {
+  return crypto.randomBytes(24).toString("base64url");
+}
+
+export function buildGoogleAuthUrl(state, nonce) {
   const url = new URL(googleAuthEndpoint);
   url.searchParams.set("client_id", config.googleOAuth.clientId);
   url.searchParams.set("redirect_uri", config.googleOAuth.redirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("state", state);
+  url.searchParams.set("nonce", nonce);
   url.searchParams.set("prompt", "select_account");
   return url.toString();
 }
@@ -41,26 +48,21 @@ export async function exchangeGoogleCode(code) {
   return response.json();
 }
 
-export async function verifyGoogleIdToken(idToken) {
+export async function verifyGoogleIdToken(idToken, expectedNonce) {
   if (!idToken) throw new Error("Google OAuth id token is missing");
-  const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
-  if (!response.ok) throw new Error("Google OAuth id token verification failed");
-  const payload = await response.json();
-  if (payload.aud !== config.googleOAuth.clientId) {
-    throw new Error("Google OAuth audience mismatch");
-  }
-  if (!["accounts.google.com", "https://accounts.google.com"].includes(payload.iss)) {
-    throw new Error("Google OAuth issuer mismatch");
-  }
-  if (Number(payload.exp) * 1000 < Date.now()) {
-    throw new Error("Google OAuth id token expired");
-  }
+  const ticket = await googleOAuthClient.verifyIdToken({ idToken, audience: config.googleOAuth.clientId });
+  const payload = ticket.getPayload();
+  if (!payload) throw new Error("Google OAuth id token payload is missing");
+  if (!expectedNonce || payload.nonce !== expectedNonce) throw new Error("Google OAuth nonce mismatch");
   if (!payload.sub) {
     throw new Error("Google OAuth subject is missing");
   }
+  if (!payload.email || payload.email_verified !== true) {
+    throw new Error("Google OAuth email is not verified");
+  }
   return {
     googleSub: payload.sub,
-    email: payload.email || "",
+    email: payload.email,
     name: payload.name || payload.email || "Google User",
     picture: payload.picture || ""
   };
