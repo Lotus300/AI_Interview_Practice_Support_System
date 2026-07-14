@@ -15,7 +15,7 @@ import { createStaticFileHandler } from "./core/static-files.mjs";
 
 const serveStatic = createStaticFileHandler();
 
-export function buildRouter() {
+export function buildRouter({ voiceService } = {}) {
   const router = createRouter();
   router.add("GET", "/api/v1/health", async (_req, res) => {
     sendJson(res, 200, { status: "ok", service: "interview-backend-api", time: nowIso() });
@@ -24,7 +24,7 @@ export function buildRouter() {
   registerProfileRoutes(router);
   registerSettingsRoutes(router);
   registerInterviewRoutes(router);
-  registerMediaRoutes(router);
+  registerMediaRoutes(router, { voiceService });
   registerFeedbackRoutes(router);
   return router;
 }

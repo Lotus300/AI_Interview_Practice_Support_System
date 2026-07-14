@@ -123,3 +123,24 @@ gcloud run revisions list \
   --project="${PROJECT_ID}" \
   --region="${REGION}"
 ```
+
+## 6. Backend APIとの接続
+
+GitHubリポジトリ変数 `VOICEVOX_BASE_URL` に、`voicevox-engine` のCloud Run URLを登録します。
+
+```text
+https://voicevox-engine-lz44oy5pza-an.a.run.app
+```
+
+Backendのデプロイ時に次の環境変数が設定されます。
+
+```text
+VOICEVOX_BASE_URL=${VOICEVOX_BASE_URL}
+VOICEVOX_AUTH_MODE=google
+VOICEVOX_DEFAULT_SPEAKER_ID=13
+VOICEVOX_TIMEOUT_MS=60000
+```
+
+BackendはCloud RunのIDトークンを自動取得して、非公開のVOICEVOX Engineへ接続します。生成したWAVはBackendインスタンスのメモリへ2分間だけ保存し、生成を要求したログインユーザーだけが再生できます。
+
+現在はBackendとVOICEVOXの双方を最大1インスタンスとしているため、この一時キャッシュ方式を使用できます。複数インスタンス化するときは、音声の一時保存先をCloud Storage等の共有ストレージへ変更してください。

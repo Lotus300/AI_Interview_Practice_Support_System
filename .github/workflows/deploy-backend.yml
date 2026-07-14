@@ -106,6 +106,10 @@ jobs:
             FIRESTORE_DATABASE_ID=(default)
             APP_ORIGIN=${{ vars.APP_ORIGIN }}
             GOOGLE_OAUTH_REDIRECT_URI=${{ vars.APP_ORIGIN }}/api/v1/auth/google/callback
+            VOICEVOX_BASE_URL=${{ vars.VOICEVOX_BASE_URL }}
+            VOICEVOX_AUTH_MODE=google
+            VOICEVOX_DEFAULT_SPEAKER_ID=13
+            VOICEVOX_TIMEOUT_MS=60000
           secrets: |-
             SESSION_SECRET=session-secret:1
             GOOGLE_OAUTH_CLIENT_ID=google-oauth-client-id:2
