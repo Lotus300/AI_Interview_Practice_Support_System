@@ -137,6 +137,7 @@ button.text-button { padding: 5px; border: 0; color: var(--blue); background: tr
 .interview-card blockquote { max-width: 850px; margin: 0 auto; padding: clamp(42px, 7vw, 75px) 30px; font-size: clamp(20px, 3vw, 28px); font-weight: 600; line-height: 1.8; text-align: center; }
 .answer-card { margin-top: 20px; }
 .answer-card textarea { min-height: 135px; padding: 15px; resize: vertical; line-height: 1.8; }
+.answer-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .answer-controls { display: flex; align-items: center; gap: 13px; margin-top: 14px; }
 .record-button, .recording-button { display: flex; align-items: center; gap: 9px; }
 .record-button span { color: var(--red); }
@@ -208,6 +209,8 @@ button.text-button { padding: 5px; border: 0; color: var(--blue); background: tr
   .hero-visual { display: none; }
   .summary-card { position: static; }
   .form-grid { grid-template-columns: 1fr; }
+  .answer-card .card-title-row { align-items: flex-start; flex-direction: column; }
+  .answer-heading-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   .answer-controls { flex-wrap: wrap; }
   .submit-answer { width: 100%; margin-left: 0; }
   .interview-footer { align-items: flex-start; gap: 10px; }

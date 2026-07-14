@@ -3,7 +3,8 @@ import { clearInterviewState, notify, state } from "./core/state.mjs";
 import { hasClickCommand } from "./core/events.mjs";
 import { disposeRecording, startRecording, stopRecording } from "./features/recording.mjs";
 import { previewTextForControl, readVoiceSettings, voicePreviewTexts } from "./features/voice-preview.mjs";
-import { configurePreviewPlayback } from "./features/voice-playback.mjs";
+import { configurePreviewPlayback, createAudioForPlayback, prepareAutoplayPlayback } from "./features/voice-playback.mjs";
+import { readQuestionAutomatically, shouldPrepareNextQuestion } from "./features/question-audio.mjs";
 import { render } from "./views/index.mjs";
 
 async function refreshMe() {
@@ -53,7 +54,7 @@ async function handleLogout() {
 let activeVoicePlayback = null;
 let latestPreviewRequest = 0;
 
-async function synthesizeVoice(text, settings = state.settings, { preview = false } = {}) {
+async function synthesizeVoice(text, settings = state.settings, { preview = false, preparedPlayback = null } = {}) {
   if (!text) return;
   const previewRequest = preview ? ++latestPreviewRequest : null;
   const data = await api("/voice/synthesize", { method: "POST", body: JSON.stringify({ text, ...settings, preview }) });
@@ -65,7 +66,7 @@ async function synthesizeVoice(text, settings = state.settings, { preview = fals
   if (data.voice?.playbackUrl) {
     activeVoicePlayback?.audio.pause();
     await activeVoicePlayback?.context?.close();
-    const audio = new Audio(resolveApiResource(data.voice.playbackUrl));
+    const audio = await createAudioForPlayback(resolveApiResource(data.voice.playbackUrl), preparedPlayback);
     const context = preview ? configurePreviewPlayback(audio, settings) : null;
     await context?.resume();
     activeVoicePlayback = { audio, context };
@@ -75,6 +76,8 @@ async function synthesizeVoice(text, settings = state.settings, { preview = fals
 }
 
 async function submitAnswer() {
+  const preparedQuestionPlayback = shouldPrepareNextQuestion(state.session) ? prepareAutoplayPlayback() : null;
+  let nextQuestionToRead = null;
   state.busy = true;
   render();
   const result = await interviewApi.submitAnswer(state.session.id, {
@@ -93,9 +96,20 @@ async function submitAnswer() {
     const next = await interviewApi.nextQuestion(state.session.id);
     state.session.questions.push(next.question);
     state.question = next.question;
+    nextQuestionToRead = next.question;
     notify(result.analysis.needsDeepDive ? "回答を分析し、内容を深掘りする質問を作成しました。" : "回答を保存し、次の質問へ進みました。", "success");
   }
   state.busy = false;
+  render();
+  if (nextQuestionToRead) {
+    await readQuestionAutomatically({
+      question: nextQuestionToRead,
+      settings: state.settings,
+      preparedPlayback: preparedQuestionPlayback,
+      synthesize: synthesizeVoice,
+      onFailure: () => notify("質問を自動再生できませんでした。面接官欄の♫ボタンから再生できます。", "info")
+    });
+  }
 }
 
 async function finishInterview() {
@@ -209,6 +223,7 @@ document.addEventListener("submit", async event => {
   event.preventDefault();
   const form = event.target;
   const values = Object.fromEntries(new FormData(form).entries());
+  const preparedQuestionPlayback = form.dataset.form === "condition" ? prepareAutoplayPlayback() : null;
   state.busy = true;
   try {
     if (form.dataset.form === "profile") {
@@ -223,6 +238,15 @@ document.addEventListener("submit", async event => {
       state.question = data.question;
       state.session.questions.push(data.question);
       state.screen = "interview";
+      state.busy = false;
+      render();
+      await readQuestionAutomatically({
+        question: data.question,
+        settings: state.settings,
+        preparedPlayback: preparedQuestionPlayback,
+        synthesize: synthesizeVoice,
+        onFailure: () => notify("質問を自動再生できませんでした。面接官欄の♫ボタンから再生できます。", "info")
+      });
     }
     if (form.dataset.form === "settings") {
       state.settings = (await api("/settings", { method: "PUT", body: JSON.stringify(values) })).settings;
