@@ -1,7 +1,9 @@
+export const voicePreviewText = "これから面接を開始します。名前と経歴または学歴をお願いします。";
+
 export const voicePreviewTexts = Object.freeze({
-  speaker: "これから面接を開始します。名前と経歴または学歴をお願いします。",
-  speedScale: "話す速度を調整しています。",
-  volumeScale: "音量の調整をしています。"
+  speaker: voicePreviewText,
+  speedScale: voicePreviewText,
+  volumeScale: voicePreviewText
 });
 
 export function previewTextForControl(controlName) {

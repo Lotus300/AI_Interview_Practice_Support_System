@@ -24,7 +24,8 @@ export function registerMediaRoutes(router, { voiceService = createVoiceService(
       text: requireText(body.text, "質問文", 1000),
       speaker: requireChoice(body.speaker ?? "青山龍星", "話者", Object.keys(speakerIds)),
       speedScale: numberInRange(body.speedScale, "話速", 0.5, 2, 1),
-      volumeScale: numberInRange(body.volumeScale, "音量", 0, 2, 1)
+      volumeScale: numberInRange(body.volumeScale, "音量", 0, 2, 1),
+      preview: body.preview === true
     });
     sendJson(res, 200, result);
   });

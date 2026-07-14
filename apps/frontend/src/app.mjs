@@ -3,6 +3,7 @@ import { clearInterviewState, notify, state } from "./core/state.mjs";
 import { hasClickCommand } from "./core/events.mjs";
 import { disposeRecording, startRecording, stopRecording } from "./features/recording.mjs";
 import { previewTextForControl, readVoiceSettings, voicePreviewTexts } from "./features/voice-preview.mjs";
+import { configurePreviewPlayback } from "./features/voice-playback.mjs";
 import { render } from "./views/index.mjs";
 
 async function refreshMe() {
@@ -49,19 +50,26 @@ async function handleLogout() {
   Object.assign(state, { user: null, profile: null, settings: null, voiceSettingsDraft: null, sessions: [], screen: "login", drawerOpen: false });
 }
 
-let activeVoiceAudio = null;
+let activeVoicePlayback = null;
+let latestPreviewRequest = 0;
 
-async function synthesizeVoice(text, settings = state.settings) {
+async function synthesizeVoice(text, settings = state.settings, { preview = false } = {}) {
   if (!text) return;
-  const data = await api("/voice/synthesize", { method: "POST", body: JSON.stringify({ text, ...settings }) });
+  const previewRequest = preview ? ++latestPreviewRequest : null;
+  const data = await api("/voice/synthesize", { method: "POST", body: JSON.stringify({ text, ...settings, preview }) });
+  if (preview && previewRequest !== latestPreviewRequest) return;
   if (data.aiResponseStatus === "text_only") {
     notify("音声エンジン未接続のため、テキスト表示で続けます。", "info");
     return;
   }
   if (data.voice?.playbackUrl) {
-    activeVoiceAudio?.pause();
-    activeVoiceAudio = new Audio(resolveApiResource(data.voice.playbackUrl));
-    await activeVoiceAudio.play();
+    activeVoicePlayback?.audio.pause();
+    await activeVoicePlayback?.context?.close();
+    const audio = new Audio(resolveApiResource(data.voice.playbackUrl));
+    const context = preview ? configurePreviewPlayback(audio, settings) : null;
+    await context?.resume();
+    activeVoicePlayback = { audio, context };
+    await audio.play();
   }
   notify("音声を再生しています。", "info");
 }
@@ -138,7 +146,7 @@ const actionHandlers = {
   login: handleLogin,
   logout: handleLogout,
   voice: () => synthesizeVoice(state.question?.text),
-  "preview-voice": (target) => synthesizeVoice(voicePreviewTexts.speaker, readVoiceSettings(target.form, state.voiceSettingsDraft || state.settings)),
+  "preview-voice": (target) => synthesizeVoice(voicePreviewTexts.speaker, readVoiceSettings(target.form, state.voiceSettingsDraft || state.settings), { preview: true }),
   "start-recording": () => startRecording(render),
   "stop-recording": () => stopRecording(render),
   "submit-answer": submitAnswer,
@@ -168,7 +176,7 @@ document.addEventListener("change", async event => {
   const settings = readVoiceSettings(event.target.form, state.voiceSettingsDraft || state.settings);
   state.voiceSettingsDraft = { ...state.voiceSettingsDraft, ...settings };
   try {
-    await synthesizeVoice(text, settings);
+    await synthesizeVoice(text, settings, { preview: true });
   } catch (error) {
     notify(error.message, "error");
   }

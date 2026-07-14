@@ -1,5 +1,6 @@
 import { config } from "../../config.mjs";
 import { createVoiceCache } from "./voice-cache.mjs";
+import { createSynthesisCache } from "./synthesis-cache.mjs";
 import { createVoicevoxClient } from "./voicevox-client.mjs";
 
 export const speakerIds = Object.freeze({
@@ -19,26 +20,36 @@ function wavDurationMs(audio) {
 export function createVoiceService({
   client = createVoicevoxClient(config.voicevox),
   cache = createVoiceCache({ ttlMs: config.voicevox.cacheTtlMs, maxEntries: config.voicevox.maxCacheEntries }),
+  previewCache = createSynthesisCache({
+    ttlMs: config.voicevox.previewCacheTtlMs,
+    maxEntries: config.voicevox.previewCacheMaxEntries
+  }),
   defaultSpeakerId = config.voicevox.defaultSpeakerId,
   logger = console
 } = {}) {
   return {
-    async synthesize({ userId, text, speaker, speedScale, volumeScale }) {
+    async synthesize({ userId, text, speaker, speedScale, volumeScale, preview = false }) {
       if (!client.configured) {
         return { aiResponseStatus: "text_only", text, voice: null, reason: "VOICEVOX_NOT_CONFIGURED", provider: "local_mock" };
       }
       try {
         const speakerId = speakerIds[speaker] ?? defaultSpeakerId;
-        const audioQuery = await client.createAudioQuery({ text, speakerId });
-        audioQuery.speedScale = speedScale;
-        audioQuery.volumeScale = volumeScale;
-        const audio = await client.synthesize({ audioQuery, speakerId });
+        const createAudio = async () => {
+          const audioQuery = await client.createAudioQuery({ text, speakerId });
+          audioQuery.speedScale = preview ? 1 : speedScale;
+          audioQuery.volumeScale = preview ? 1 : volumeScale;
+          return client.synthesize({ audioQuery, speakerId });
+        };
+        const audio = preview
+          ? await previewCache.getOrCreate(`${speakerId}:${text}`, createAudio)
+          : await createAudio();
         const id = cache.put({ userId, audio });
         return {
           aiResponseStatus: "voice_ready",
           text,
           voice: { id, playbackUrl: `/api/v1/voice/playback/${id}`, durationMs: wavDurationMs(audio) },
-          provider: "voicevox"
+          provider: "voicevox",
+          playbackAdjustment: preview ? "client" : "synthesized"
         };
       } catch (error) {
         logger.error("VOICEVOX synthesis failed", { name: error.name, message: error.message });
