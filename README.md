@@ -49,6 +49,8 @@ apps/frontend/src/
 
 外部API本接続は、詳細設計に従って各Client層へ追加します。
 
+Google OAuthの本番設定は [docs/GOOGLE_OAUTH_SETUP.md](docs/GOOGLE_OAUTH_SETUP.md) を参照してください。
+
 ## 起動
 
 Codex内蔵Nodeを使う場合:

@@ -1,6 +1,6 @@
 import { URL } from "node:url";
 import { config, isGoogleOAuthConfigured } from "../../config.mjs";
-import { buildGoogleAuthUrl, createOAuthState, exchangeGoogleCode, verifyGoogleIdToken } from "../../oauth.mjs";
+import { buildGoogleAuthUrl, createOAuthNonce, createOAuthState, exchangeGoogleCode, verifyGoogleIdToken } from "../../oauth.mjs";
 import { clearOAuthStateCookie, clearSessionCookie, parseCookies, sendJson, sendNoContent, setOAuthStateCookie, setSessionCookie } from "../../http.mjs";
 import { consumeOAuthState, createSessionForUser, ensureDemoUser, findOrCreateGoogleUser, revokeSession, saveOAuthState } from "../../store.mjs";
 import { publicUser } from "../../core/resources.mjs";
@@ -16,8 +16,9 @@ export function registerAuthRoutes(router) {
   router.add("GET", "/api/v1/auth/google/start", async (_req, res) => {
     if (isGoogleOAuthConfigured()) {
       const state = createOAuthState();
-      await saveOAuthState(state);
-      return sendJson(res, 200, { mode: "google_oauth", authUrl: buildGoogleAuthUrl(state) }, { "set-cookie": setOAuthStateCookie(state) });
+      const nonce = createOAuthNonce();
+      await saveOAuthState(state, nonce);
+      return sendJson(res, 200, { mode: "google_oauth", authUrl: buildGoogleAuthUrl(state, nonce) }, { "set-cookie": setOAuthStateCookie(state) });
     }
 
     if (!config.allowDemoAuth) {
@@ -34,13 +35,16 @@ export function registerAuthRoutes(router) {
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     const cookies = parseCookies(req.headers.cookie);
-    if (!code || !state || state !== cookies[config.oauthStateCookieName] || !await consumeOAuthState(state)) {
+    const oauthState = code && state && state === cookies[config.oauthStateCookieName]
+      ? await consumeOAuthState(state)
+      : null;
+    if (!oauthState) {
       return redirect(res, `${config.appOrigin}/?auth=failed`, clearOAuthStateCookie());
     }
 
     try {
       const token = await exchangeGoogleCode(code);
-      const profile = await verifyGoogleIdToken(token.id_token);
+      const profile = await verifyGoogleIdToken(token.id_token, oauthState.nonce);
       const user = await findOrCreateGoogleUser(profile);
       redirect(res, config.appOrigin, [setSessionCookie(await createSessionForUser(user.id)), clearOAuthStateCookie()]);
     } catch {
