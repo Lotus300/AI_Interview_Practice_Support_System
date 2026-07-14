@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+node_modules
+coverage
+outputs
+prototype
+TEXT
+docs
+apps/frontend
+*.log
+*.zip
+gha-creds-*.json

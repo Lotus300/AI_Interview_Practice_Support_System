@@ -13,6 +13,10 @@ export const db = {
   feedbacks: new Map()
 };
 
+export function resetDb() {
+  for (const collection of Object.values(db)) collection.clear();
+}
+
 export function createId(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString("hex")}`;
 }

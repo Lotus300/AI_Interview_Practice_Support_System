@@ -41,14 +41,11 @@ export async function exchangeGoogleCode(code) {
   return response.json();
 }
 
-function decodeJwtPayload(token) {
-  const [, payload] = token.split(".");
-  if (!payload) throw new Error("Invalid id token");
-  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-}
-
-export function verifyGoogleIdToken(idToken) {
-  const payload = decodeJwtPayload(idToken);
+export async function verifyGoogleIdToken(idToken) {
+  if (!idToken) throw new Error("Google OAuth id token is missing");
+  const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+  if (!response.ok) throw new Error("Google OAuth id token verification failed");
+  const payload = await response.json();
   if (payload.aud !== config.googleOAuth.clientId) {
     throw new Error("Google OAuth audience mismatch");
   }

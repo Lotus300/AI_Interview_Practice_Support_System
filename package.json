@@ -8,7 +8,8 @@
     "dev:frontend": "node apps/frontend/server.mjs",
     "dev": "node apps/backend/src/server.mjs",
     "test": "node --test",
-    "typecheck": "node -e \"console.log('typecheck placeholder: no compile step yet')\""
+    "check": "node --check apps/backend/src/server.mjs && node --check apps/frontend/src/app.mjs",
+    "typecheck": "npm run check"
   },
   "workspaces": [
     "apps/*",

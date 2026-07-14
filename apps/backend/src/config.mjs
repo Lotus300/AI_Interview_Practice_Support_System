@@ -4,6 +4,7 @@ export const config = {
   sessionCookieName: process.env.SESSION_COOKIE_NAME || "interview_session",
   oauthStateCookieName: process.env.OAUTH_STATE_COOKIE_NAME || "interview_oauth_state",
   sessionSecret: process.env.SESSION_SECRET || "local-dev-session-secret",
+  secureCookies: process.env.NODE_ENV === "production",
   googleOAuth: {
     clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
     clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",

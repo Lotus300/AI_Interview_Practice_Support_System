@@ -1,0 +1,104 @@
+name: Deploy backend to Cloud Run
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/backend/**"
+      - "packages/shared/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/deploy-backend.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/backend/**"
+      - "packages/shared/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run tests
+        run: npm test
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE_URI: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPOSITORY }}/backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker authentication
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build and push container image
+        run: |
+          docker build --tag "${IMAGE_URI}:${GITHUB_SHA}" .
+          docker push "${IMAGE_URI}:${GITHUB_SHA}"
+
+      - name: Deploy private Cloud Run service
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          service: ${{ vars.CLOUD_RUN_SERVICE }}
+          region: ${{ vars.GCP_REGION }}
+          image: ${{ env.IMAGE_URI }}:${{ github.sha }}
+          env_vars: |-
+            NODE_ENV=production
+            FIRESTORE_DATABASE_ID=(default)
+          secrets: |-
+            SESSION_SECRET=session-secret:1
+          flags: >-
+            --service-account=${{ vars.CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
+            --port=8080
+            --min-instances=0
+            --max-instances=1
+            --cpu=1
+            --memory=512Mi
+            --concurrency=40
+            --timeout=300
+
+      - name: Show service URL
+        run: echo "Cloud Run URL is ${{ steps.deploy.outputs.url }}"
