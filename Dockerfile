@@ -6,6 +6,7 @@ ENV NODE_ENV=production \
 WORKDIR /app
 
 COPY --chown=node:node apps/backend ./apps/backend
+COPY --chown=node:node apps/frontend ./apps/frontend
 COPY --chown=node:node packages/shared ./packages/shared
 
 USER node

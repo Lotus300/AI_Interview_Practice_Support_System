@@ -11,6 +11,9 @@ import { registerSettingsRoutes } from "./features/settings/routes.mjs";
 import { registerInterviewRoutes } from "./features/interviews/routes.mjs";
 import { registerMediaRoutes } from "./features/media/routes.mjs";
 import { registerFeedbackRoutes } from "./features/feedback/routes.mjs";
+import { createStaticFileHandler } from "./core/static-files.mjs";
+
+const serveStatic = createStaticFileHandler();
 
 export function buildRouter() {
   const router = createRouter();
@@ -26,9 +29,20 @@ export function buildRouter() {
   return router;
 }
 
+function requestOrigin(req) {
+  const protocol = String(req.headers["x-forwarded-proto"] || (req.socket.encrypted ? "https" : "http"))
+    .split(",", 1)[0]
+    .trim();
+  return req.headers.host ? `${protocol}://${req.headers.host}` : null;
+}
+
+function isAllowedOrigin(req, origin) {
+  return !origin || origin === config.appOrigin || origin === requestOrigin(req);
+}
+
 function applyCors(req, res) {
   const origin = req.headers.origin;
-  if (origin === config.appOrigin) res.setHeader("access-control-allow-origin", origin);
+  if (origin && isAllowedOrigin(req, origin)) res.setHeader("access-control-allow-origin", origin);
   res.setHeader("access-control-allow-credentials", "true");
   res.setHeader("access-control-allow-methods", "GET,POST,PUT,DELETE,OPTIONS");
   res.setHeader("access-control-allow-headers", "content-type");
@@ -36,7 +50,7 @@ function applyCors(req, res) {
 }
 
 function rejectOrigin(req, origin) {
-  return ["POST", "PUT", "DELETE", "OPTIONS"].includes(req.method) && origin && origin !== config.appOrigin;
+  return ["POST", "PUT", "DELETE", "OPTIONS"].includes(req.method) && !isAllowedOrigin(req, origin);
 }
 
 export function createServer({ router = buildRouter() } = {}) {
@@ -51,7 +65,10 @@ export function createServer({ router = buildRouter() } = {}) {
 
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const matched = router.match(req.method, url.pathname);
-      if (!matched) return router.notFound(res);
+      if (!matched) {
+        if (!url.pathname.startsWith("/api/") && await serveStatic(req, res, url.pathname)) return;
+        return router.notFound(res);
+      }
 
       const cookies = parseCookies(req.headers.cookie);
       const user = matched.entry.auth ? findUserBySession(cookies[config.sessionCookieName]) : null;

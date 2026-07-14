@@ -1,4 +1,7 @@
-const apiBase = globalThis.INTERVIEW_API_BASE || "http://localhost:8080/api/v1";
+const localDevelopmentApi = globalThis.location?.hostname === "localhost" && globalThis.location?.port === "5173"
+  ? "http://localhost:8080/api/v1"
+  : "/api/v1";
+const apiBase = globalThis.INTERVIEW_API_BASE || localDevelopmentApi;
 
 export async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) };

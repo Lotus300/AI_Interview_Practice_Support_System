@@ -52,3 +52,15 @@
 | VOICEVOX | `text_only` 応答 | Voicevox Clientを呼ぶServiceへ差し替え |
 
 この境界により、外部API接続後も画面・認証・状態遷移・履歴・テスト構造を維持できる。
+
+## Cloud Run配信構成
+
+本番環境では単一のCloud RunサービスがBackend APIとFrontend静的ファイルを配信する。
+
+- `/api/*` はBackendのルーターで処理する
+- `/api/*` 以外のGET/HEADはFrontend静的ファイルを返す
+- FrontendからBackendへは相対URL `/api/v1` で接続する
+- 更新系リクエストは同一Originまたは明示した `APP_ORIGIN` のみ許可する
+- APIに存在しないパスはFrontendへフォールバックせず、JSONの404を返す
+
+これにより、本番環境のCookie認証とCORSを単純化し、Frontend用の別サービスを管理する必要をなくす。
