@@ -59,3 +59,28 @@ test("未許可Originと不正入力を拒否する", () => withServer(async bas
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).code, "VALIDATION_ERROR");
 }));
+
+test("フロントエンドを配信しAPIの404はJSONで返す", () => withServer(async base => {
+  const appOrigin = base.replace(/\/api\/v1$/, "");
+
+  const indexResponse = await fetch(appOrigin);
+  assert.equal(indexResponse.status, 200);
+  assert.match(indexResponse.headers.get("content-type"), /^text\/html/);
+  assert.match(await indexResponse.text(), /<div id="app"><\/div>/);
+
+  const moduleResponse = await fetch(`${appOrigin}/src/app.mjs`);
+  assert.equal(moduleResponse.status, 200);
+  assert.match(moduleResponse.headers.get("content-type"), /^text\/javascript/);
+
+  const apiNotFound = await fetch(`${base}/missing`);
+  assert.equal(apiNotFound.status, 404);
+  assert.equal((await apiNotFound.json()).code, "NOT_FOUND");
+
+  const loginResponse = await fetch(`${base}/auth/google/start`);
+  const cookie = loginResponse.headers.get("set-cookie").split(";")[0];
+  const sameOriginLogout = await fetch(`${base}/auth/logout`, {
+    method: "POST",
+    headers: { cookie, origin: appOrigin }
+  });
+  assert.equal(sameOriginLogout.status, 204);
+}));

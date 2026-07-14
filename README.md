@@ -90,6 +90,8 @@ npm run check
 - Backend: `http://localhost:8080/api/v1/health`
 - Frontend: `http://localhost:5173`
 
+Cloud RunではBackendがFrontendも配信するため、サービスURLだけで画面とAPIの両方へアクセスできる。同一オリジン構成ではFrontendのAPI接続先は `/api/v1` になる。ローカルでFrontendをポート5173から起動した場合だけ、従来どおり `http://localhost:8080/api/v1` を使用する。
+
 ## 注意
 
 Google OAuthは環境変数設定時に実接続します。Firestore、Gemini、Speech-to-Text、VOICEVOXはクライアント本接続前のローカルモックで、未接続時も一連の画面確認を継続できます。メモリ保存のため、Backendを再起動するとローカルデータは消去されます。

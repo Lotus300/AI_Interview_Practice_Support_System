@@ -9,7 +9,6 @@ outputs
 prototype
 TEXT
 docs
-apps/frontend
 *.log
 *.zip
 gha-creds-*.json
