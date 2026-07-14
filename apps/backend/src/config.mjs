@@ -13,6 +13,14 @@ export const config = {
     clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
     clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",
     redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI || "http://localhost:8080/api/v1/auth/google/callback"
+  },
+  voicevox: {
+    baseUrl: process.env.VOICEVOX_BASE_URL || "",
+    authMode: process.env.VOICEVOX_AUTH_MODE || "none",
+    defaultSpeakerId: Number(process.env.VOICEVOX_DEFAULT_SPEAKER_ID || 13),
+    timeoutMs: Number(process.env.VOICEVOX_TIMEOUT_MS || 60000),
+    cacheTtlMs: Number(process.env.VOICEVOX_CACHE_TTL_MS || 120000),
+    maxCacheEntries: Number(process.env.VOICEVOX_MAX_CACHE_ENTRIES || 20)
   }
 };
 

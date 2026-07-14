@@ -24,6 +24,16 @@ export function sendNoContent(res, headers = {}) {
   res.end();
 }
 
+export function sendBuffer(res, statusCode, data, contentType, headers = {}) {
+  const body = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  res.writeHead(statusCode, {
+    "content-type": contentType,
+    "content-length": body.length,
+    ...headers
+  });
+  res.end(body);
+}
+
 export function parseCookies(cookieHeader = "") {
   return Object.fromEntries(
     cookieHeader
