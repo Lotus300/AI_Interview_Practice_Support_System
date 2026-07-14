@@ -30,7 +30,7 @@ test("ログインからフィードバック取得まで完走できる", () =>
     return response.status === 204 ? null : response.json();
   };
 
-  await request("/profile", { method: "PUT", body: JSON.stringify({ fullName: "テスト 太郎", education: "テスト大学", desiredRole: "Webエンジニア" }) });
+  await request("/profile", { method: "PUT", body: JSON.stringify({ fullName: "テスト 太郎", education: "テスト大学", graduationStatus: "卒業", desiredRole: "Webエンジニア" }) });
   const { session } = await request("/interview-sessions", { method: "POST", body: JSON.stringify({ jobRole: "Webエンジニア", industry: "IT", questionCount: 2 }) });
   const { question } = await request(`/interview-sessions/${session.id}/initial-question`, { method: "POST", body: "{}" });
   const answer = await request(`/interview-sessions/${session.id}/answers`, { method: "POST", body: JSON.stringify({ questionId: question.id, answerText: "集計を自動化し、月6時間の作業を削減しました。" }) });
@@ -58,6 +58,14 @@ test("未許可Originと不正入力を拒否する", () => withServer(async bas
   });
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).code, "VALIDATION_ERROR");
+
+  const invalidChoice = await fetch(`${base}/profile`, {
+    method: "PUT",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ fullName: "テスト 太郎", education: "テスト大学", graduationStatus: "その他" })
+  });
+  assert.equal(invalidChoice.status, 400);
+  assert.equal((await invalidChoice.json()).code, "VALIDATION_ERROR");
 }));
 
 test("フロントエンドを配信しAPIの404はJSONで返す", () => withServer(async base => {

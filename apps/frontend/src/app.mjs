@@ -1,5 +1,6 @@
 import { api, interviewApi } from "./core/api.mjs";
 import { clearInterviewState, notify, state } from "./core/state.mjs";
+import { hasClickCommand } from "./core/events.mjs";
 import { disposeRecording, startRecording, stopRecording } from "./features/recording.mjs";
 import { render } from "./views/index.mjs";
 
@@ -152,6 +153,7 @@ document.addEventListener("keydown", event => {
 document.addEventListener("click", async event => {
   const target = event.target.closest("button, [data-action]");
   if (!target) return;
+  if (!hasClickCommand(target, actionHandlers)) return;
   try {
     if (target.dataset.screen) await navigate(target.dataset.screen);
     const handler = actionHandlers[target.dataset.action];

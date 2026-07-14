@@ -13,6 +13,14 @@ export function optionalText(value, maxLength = 4000) {
   return text;
 }
 
+export function requireChoice(value, label, choices) {
+  const text = requireText(value, label, 100);
+  if (!choices.includes(text)) {
+    throw new ApiError(400, "VALIDATION_ERROR", `${label}を選択してください`);
+  }
+  return text;
+}
+
 export function numberInRange(value, label, min, max, fallback) {
   const number = value === undefined || value === "" ? fallback : Number(value);
   if (!Number.isFinite(number) || number < min || number > max) {
