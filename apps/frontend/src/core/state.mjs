@@ -18,7 +18,9 @@ export const state = {
   messageTone: "info",
   recorder: null,
   mediaStream: null,
-  audioChunks: []
+  audioChunks: [],
+  speechRecognition: null,
+  speechRealtimeHasResult: false
 };
 
 export function notify(message, tone = "info") {
@@ -34,6 +36,8 @@ export function clearInterviewState() {
     feedback: null,
     feedbackStatus: "not_started",
     feedbackJobId: null,
-    speechStatus: "idle"
+    speechStatus: "idle",
+    speechRecognition: null,
+    speechRealtimeHasResult: false
   });
 }
