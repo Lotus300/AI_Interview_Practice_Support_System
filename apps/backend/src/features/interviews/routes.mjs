@@ -12,6 +12,15 @@ async function owned(res, sessionId, userId) {
   return found;
 }
 
+function configuredQuestionCount(session) {
+  return Number(session?.condition?.questionCount || 0);
+}
+
+function reachedQuestionLimit(session) {
+  const limit = configuredQuestionCount(session);
+  return limit > 0 && (session.questions.length >= limit || session.answers.length >= limit);
+}
+
 export function registerInterviewRoutes(router, { aiService = createInterviewAiService() } = {}) {
   router.add("GET", "/api/v1/interview-sessions", async (_req, res, ctx) => {
     const sessions = await (await getDataStore()).listSessions(ctx.user.id);
@@ -71,6 +80,8 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     const store = await getDataStore();
     const currentQuestion = found.session.questions.at(-1);
     if (!currentQuestion || (body.questionId && body.questionId !== currentQuestion.id)) throw new ApiError(409, "INVALID_STATE", "表示中の質問に回答してください");
+    if (found.session.answers.length >= configuredQuestionCount(found.session)) throw new ApiError(409, "QUESTION_LIMIT_REACHED", "設定した質問数に到達しています");
+    if (found.session.answers.some(answer => answer.questionId === currentQuestion.id)) throw new ApiError(409, "ALREADY_ANSWERED", "この質問には回答済みです");
     const analysis = await aiService.analyze(await store.getProfile(ctx.user.id), found.session, text);
     const answer = {
       id: createId("ans"),
@@ -86,13 +97,21 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     found.session.status = sessionStatuses.ANSWER_ANALYZING;
     found.session.updatedAt = nowIso();
     await store.saveSession(found.session);
-    sendJson(res, 200, { answer, analysis, sessionStatus: found.session.status });
+    sendJson(res, 200, {
+      answer,
+      analysis,
+      limitReached: found.session.answers.length >= configuredQuestionCount(found.session),
+      sessionStatus: found.session.status
+    });
   });
 
   router.add("POST", "/api/v1/interview-sessions/:sessionId/next-question", async (_req, res, ctx, params) => {
     const found = await owned(res, params.sessionId, ctx.user.id);
     if (!found.session) return;
     if (!found.session.answers.length) throw new ApiError(409, "INVALID_STATE", "回答を送信してから次の質問へ進んでください");
+    if (reachedQuestionLimit(found.session)) {
+      return sendJson(res, 200, { question: null, limitReached: true, sessionStatus: found.session.status });
+    }
     if (found.session.questions.length > found.session.answers.length) {
       return sendJson(res, 200, { question: found.session.questions.at(-1), sessionStatus: found.session.status });
     }

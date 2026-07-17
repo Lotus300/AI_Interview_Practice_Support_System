@@ -77,6 +77,38 @@ test("未許可Originと不正入力を拒否する", () => withServer(async bas
   assert.equal((await invalidChoice.json()).code, "VALIDATION_ERROR");
 }));
 
+test("設定した質問数を超えて次の質問を生成しない", () => withServer(async base => {
+  const loginResponse = await fetch(`${base}/auth/google/start`);
+  const cookie = loginResponse.headers.get("set-cookie").split(";")[0];
+  const request = async (path, options = {}) => {
+    const response = await fetch(`${base}${path}`, {
+      ...options,
+      headers: { cookie, ...(options.body ? { "content-type": "application/json" } : {}) }
+    });
+    assert.ok(response.ok, `${options.method || "GET"} ${path}: ${response.status}`);
+    return response.json();
+  };
+
+  const { session } = await request("/interview-sessions", {
+    method: "POST",
+    body: JSON.stringify({ jobRole: "Webエンジニア", industry: "IT", questionCount: 1 })
+  });
+  const { question } = await request(`/interview-sessions/${session.id}/initial-question`, { method: "POST", body: "{}" });
+  const answerResult = await request(`/interview-sessions/${session.id}/answers`, {
+    method: "POST",
+    body: JSON.stringify({ questionId: question.id, answerText: "回答しました。" })
+  });
+  assert.equal(answerResult.limitReached, true);
+
+  const next = await request(`/interview-sessions/${session.id}/next-question`, { method: "POST", body: "{}" });
+  assert.equal(next.limitReached, true);
+  assert.equal(next.question, null);
+
+  const saved = await request(`/interview-sessions/${session.id}`);
+  assert.equal(saved.session.questions.length, 1);
+  assert.equal(saved.session.answers.length, 1);
+}));
+
 test("フロントエンドを配信しAPIの404はJSONで返す", () => withServer(async base => {
   const appOrigin = base.replace(/\/api\/v1$/, "");
 

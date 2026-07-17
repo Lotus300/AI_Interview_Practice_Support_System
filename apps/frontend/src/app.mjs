@@ -105,11 +105,18 @@ async function submitAnswer() {
   state.answerDraft = "";
   state.speechStatus = "idle";
 
-  if (state.session.answers.length >= state.session.condition.questionCount) {
+  if (result.limitReached || state.session.answers.length >= state.session.condition.questionCount) {
     state.screen = "finish";
     notify("設定した質問数に到達しました。面接を終了して分析できます。", "success");
   } else {
     const next = await interviewApi.nextQuestion(state.session.id);
+    if (next.limitReached || !next.question) {
+      state.screen = "finish";
+      notify("設定した質問数に到達しました。面接を終了して分析できます。", "success");
+      state.busy = false;
+      render();
+      return;
+    }
     state.session.questions.push(next.question);
     state.question = next.question;
     nextQuestionToRead = next.question;
