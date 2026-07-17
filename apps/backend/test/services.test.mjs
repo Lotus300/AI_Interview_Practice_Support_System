@@ -5,9 +5,11 @@ import {
   appendUtterance,
   createFeedback,
   createInitialQuestion,
+  createInterviewAiService,
   createNextQuestion,
   ensureDistinctQuestion,
-  finishFeedbackJob
+  finishFeedbackJob,
+  interviewContext
 } from "../src/services.mjs";
 import { db, getDataStore, resetDb, seedInterviewSession } from "../src/store.mjs";
 import { feedbackStatuses } from "../../../packages/shared/src/constants.mjs";
@@ -40,6 +42,31 @@ test("生成結果が既出質問と同じ場合は異なる質問へ置き換�
 
   assert.notEqual(question.text, session.questions[0].text);
   assert.equal(question.type, "fallback");
+});
+
+test("Geminiへは現在の質問を含む直近3往復だけを渡す", () => {
+  const utterances = Array.from({ length: 10 }, (_, index) => ({ role: index % 2 ? "user" : "ai", text: `発言${index + 1}` }));
+  const parsed = JSON.parse(interviewContext({ fullName: "山田 花子", workHistory: "職歴原文" }, { condition: { jobRole: "開発" }, utterances }));
+
+  assert.equal(parsed.profile.workHistory, "職歴原文");
+  assert.equal(parsed.conversation.length, 6);
+  assert.equal(parsed.conversation[0].text, "発言5");
+  assert.equal(parsed.conversation.at(-1).text, "発言10");
+});
+
+test("Gemini再試行後も失敗した場合は面接を止めず深掘り質問を返す", async () => {
+  const session = { questions: [{ text: "経験を教えてください。" }], condition: {}, utterances: [] };
+  const warnings = [];
+  const service = createInterviewAiService({
+    vertex: { async generateJson() { throw Object.assign(new Error("failed"), { code: "GEMINI_EMPTY_RESPONSE", finishReason: "MAX_TOKENS" }); } },
+    logger: { warn(message, details) { warnings.push({ message, details }); } }
+  });
+
+  const turn = await service.analyzeAndNext({}, session, "チームで改善しました。");
+
+  assert.equal(turn.analysis.needsDeepDive, true);
+  assert.equal(turn.nextQuestion.type, "deep_dive");
+  assert.equal(warnings[0].details.finishReason, "MAX_TOKENS");
 });
 
 test("実際の質問と回答からフィードバックを生成する", async () => {

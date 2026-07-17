@@ -103,30 +103,47 @@ const answerTurnSchema = {
   required: ["analysis", "nextQuestion"]
 };
 
-function context(profile, session) {
-  return JSON.stringify({ profile, condition: session.condition, conversation: session.utterances?.map(item => ({ role: item.role, text: item.text })) || [] });
+const RECENT_CONTEXT_UTTERANCES = 6;
+
+export function interviewContext(profile, session) {
+  const conversation = (session.utterances || [])
+    .slice(-RECENT_CONTEXT_UTTERANCES)
+    .map(item => ({ role: item.role, text: item.text }));
+  return JSON.stringify({ profile, condition: session.condition, conversation });
 }
 
-export function createInterviewAiService({ vertex = createVertexClient() } = {}) {
+export function createInterviewAiService({ vertex = createVertexClient(), logger = console } = {}) {
   const systemInstruction = "あなたは日本語の面接練習を支援する面接官です。入力データだけを根拠にし、個人情報を推測せず、矛盾は断定せず確認候補として扱ってください。JSONスキーマに従ってください。";
   return {
     async initialQuestion(profile, session) {
-      const result = await vertex.generateJson({
-        systemInstruction,
-        responseSchema: textSchema,
-        prompt: `次のプロフィールと面接条件に合う最初の質問を1つ作成してください。経歴と志望理由を自然に確認してください。\n${context(profile, session)}`
-      });
-      return { id: createId("q"), type: result.type || "initial", text: result.text, createdAt: nowIso() };
+      try {
+        const result = await vertex.generateJson({
+          systemInstruction,
+          responseSchema: textSchema,
+          prompt: `次のプロフィールと面接条件に合う最初の質問を1つ作成してください。経歴と志望理由を自然に確認してください。\n${interviewContext(profile, session)}`
+        });
+        return { id: createId("q"), type: result.type || "initial", text: result.text, createdAt: nowIso() };
+      } catch (error) {
+        logger.warn?.("Gemini initial question fallback", { code: error.code, finishReason: error.finishReason });
+        return createInitialQuestion(profile, session);
+      }
     },
     async analyze(profile, session, answerText) {
-      return vertex.generateJson({
-        systemInstruction,
-        responseSchema: analysisSchema,
-        prompt: `直前の質問と回答を分析してください。数値の有無だけで機械的に断定せず、具体性と整合性を評価してください。\n回答: ${JSON.stringify(answerText)}\n${context(profile, session)}`
-      });
+      try {
+        return await vertex.generateJson({
+          systemInstruction,
+          responseSchema: analysisSchema,
+          prompt: `直前の質問と回答を分析してください。数値の有無だけで機械的に断定せず、具体性と整合性を評価してください。\n回答: ${JSON.stringify(answerText)}\n${interviewContext(profile, session)}`
+        });
+      } catch (error) {
+        logger.warn?.("Gemini answer analysis fallback", { code: error.code, finishReason: error.finishReason });
+        return analyzeAnswer(profile, session, answerText);
+      }
     },
     async analyzeAndNext(profile, session, answerText) {
-      const result = await vertex.generateJson({
+      let result;
+      try {
+        result = await vertex.generateJson({
         systemInstruction,
         responseSchema: answerTurnSchema,
         prompt: `直前の質問と回答を次の順序で分析し、その分析に基づく第${session.questions.length + 1}問を1つ作成してください。
@@ -146,8 +163,13 @@ export function createInterviewAiService({ vertex = createVertexClient() } = {})
 - analysis と無関係な深掘り質問を作らない。
 
 回答: ${JSON.stringify(answerText)}
-入力コンテキスト: ${context(profile, session)}`
-      });
+入力コンテキスト: ${interviewContext(profile, session)}`
+        });
+      } catch (error) {
+        logger.warn?.("Gemini answer turn fallback", { code: error.code, finishReason: error.finishReason });
+        const analysis = analyzeAnswer(profile, session, answerText);
+        return { analysis, nextQuestion: createNextQuestion(analysis, session) };
+      }
       const nextQuestion = ensureDistinctQuestion({
         id: createId("q"),
         type: result.analysis.needsDeepDive ? "deep_dive" : (result.nextQuestion.type || "normal"),
@@ -157,12 +179,17 @@ export function createInterviewAiService({ vertex = createVertexClient() } = {})
       return { analysis: result.analysis, nextQuestion };
     },
     async nextQuestion(profile, session) {
-      const result = await vertex.generateJson({
-        systemInstruction,
-        responseSchema: textSchema,
-        prompt: `会話の直前の回答に関連する第${session.questions.length + 1}問を1つ作成してください。過去に提示した質問と同じ文面や同じ論点を繰り返さず、必要なら直前の回答を深掘りしてください。\n${context(profile, session)}`
-      });
-      return ensureDistinctQuestion({ id: createId("q"), type: result.type || "normal", text: result.text, createdAt: nowIso() }, session);
+      try {
+        const result = await vertex.generateJson({
+          systemInstruction,
+          responseSchema: textSchema,
+          prompt: `会話の直前の回答に関連する第${session.questions.length + 1}問を1つ作成してください。過去に提示した質問と同じ文面や同じ論点を繰り返さず、必要なら直前の回答を深掘りしてください。\n${interviewContext(profile, session)}`
+        });
+        return ensureDistinctQuestion({ id: createId("q"), type: result.type || "normal", text: result.text, createdAt: nowIso() }, session);
+      } catch (error) {
+        logger.warn?.("Gemini next question fallback", { code: error.code, finishReason: error.finishReason });
+        return createNextQuestion(session.answers.at(-1)?.analysis, session);
+      }
     }
   };
 }

@@ -31,6 +31,29 @@ test("Vertex AI GeminiのStructured OutputをJSONとして取得する", async (
   assert.equal(result.text, "質問です");
 });
 
+test("Geminiの空応答を一度だけ再試行し終了理由を記録する", async () => {
+  let calls = 0;
+  const warnings = [];
+  const client = createVertexClient({
+    settings: { location: "asia-northeast1", model: "gemini-test", timeoutMs: 1000 },
+    logger: { warn(message, details) { warnings.push({ message, details }); } },
+    googleApi: {
+      async request() {
+        calls += 1;
+        if (calls === 1) return { candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [] } }] };
+        return { candidates: [{ finishReason: "STOP", content: { parts: [{ text: '{"text":"再試行成功","type":"normal"}' }] } }] };
+      }
+    }
+  });
+
+  const result = await client.generateJson({ systemInstruction: "system", prompt: "long prompt", responseSchema: { type: "OBJECT" } });
+
+  assert.equal(calls, 2);
+  assert.equal(result.text, "再試行成功");
+  assert.equal(warnings[0].details.finishReason, "MAX_TOKENS");
+  assert.equal(warnings[0].details.inputLength, 11);
+});
+
 test("Cloud TasksへOIDC付きフィードバックジョブを登録する", async () => {
   const originalProject = config.gcpProjectId;
   config.gcpProjectId = "project-test";
