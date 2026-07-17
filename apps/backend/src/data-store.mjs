@@ -8,7 +8,7 @@ export class MemoryDataStore {
   constructor() {
     this.collections = {
       users: new Map(), authSessions: new Map(), oauthStates: new Map(), profiles: new Map(),
-      settings: new Map(), sessions: new Map(), jobs: new Map(), feedbacks: new Map()
+      settings: new Map(), sessions: new Map(), jobs: new Map(), feedbacks: new Map(), voicePreviews: new Map()
     };
   }
 
@@ -36,6 +36,8 @@ export class MemoryDataStore {
   async saveProfile(profile) { this.collections.profiles.set(profile.userId, clone(profile)); return clone(profile); }
   async getSettings(userId) { return clone(this.collections.settings.get(userId) ?? null); }
   async saveSettings(settings) { this.collections.settings.set(settings.userId, clone(settings)); return clone(settings); }
+  async getVoicePreview(id) { return clone(this.collections.voicePreviews.get(id) ?? null); }
+  async saveVoicePreview(preview) { this.collections.voicePreviews.set(preview.id, clone(preview)); return clone(preview); }
   async getSession(id) { return clone(this.collections.sessions.get(id) ?? null); }
   async listSessions(userId) {
     return [...this.collections.sessions.values()]
@@ -138,6 +140,8 @@ export async function createFirestoreDataStore({ projectId, databaseId = "(defau
     async saveProfile(profile) { await setDocument("profiles", profile.userId, profile); return profile; },
     async getSettings(userId) { return document("settings", userId); },
     async saveSettings(settings) { await setDocument("settings", settings.userId, { ...defaultVoiceSettings, ...settings, saveAudio: false }); return settings; },
+    async getVoicePreview(id) { return document("voicePreviews", id); },
+    async saveVoicePreview(preview) { await setDocument("voicePreviews", preview.id, preview); return preview; },
     async getSession(id) { return hydrateSession(await document("interviewSessions", id)); },
     async listSessions(userId) {
       const result = await firestore.collection("interviewSessions").where("userId", "==", userId).get();

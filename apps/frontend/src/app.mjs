@@ -41,6 +41,7 @@ async function navigate(screen) {
   if (screen === "settings") {
     state.settings = (await api("/settings")).settings;
     state.voiceSettingsDraft = { ...state.settings };
+    prepareVoicePreview(voicePreviewTexts.speaker, state.settings);
   }
   state.screen = screen;
 }
@@ -68,11 +69,38 @@ async function handleLogout() {
 
 let activeVoicePlayback = null;
 let latestPreviewRequest = 0;
+let preparedVoicePreview = null;
+const preparedVoicePreviewTtlMs = 90000;
+
+function voicePreviewKey(text, settings) {
+  return JSON.stringify([text, settings?.speaker, Number(settings?.speedScale ?? 1), Number(settings?.volumeScale ?? 1)]);
+}
+
+function requestVoice(text, settings, preview) {
+  return api("/voice/synthesize", { method: "POST", body: JSON.stringify({ text, ...settings, preview }) });
+}
+
+function prepareVoicePreview(text, settings) {
+  if (!text || !settings) return;
+  const key = voicePreviewKey(text, settings);
+  const promise = requestVoice(text, settings, true);
+  promise.catch(() => {});
+  preparedVoicePreview = { key, promise, createdAt: Date.now() };
+}
+
+function voiceData(text, settings, preview) {
+  const prepared = preparedVoicePreview;
+  if (preview && prepared?.key === voicePreviewKey(text, settings) && Date.now() - prepared.createdAt < preparedVoicePreviewTtlMs) {
+    preparedVoicePreview = null;
+    return prepared.promise;
+  }
+  return requestVoice(text, settings, preview);
+}
 
 async function synthesizeVoice(text, settings = state.settings, { preview = false, preparedPlayback = null } = {}) {
   if (!text) return;
   const previewRequest = preview ? ++latestPreviewRequest : null;
-  const data = await api("/voice/synthesize", { method: "POST", body: JSON.stringify({ text, ...settings, preview }) });
+  const data = await voiceData(text, settings, preview);
   if (preview && previewRequest !== latestPreviewRequest) return;
   if (data.aiResponseStatus === "text_only") {
     const reference = data.errorId ? `（エラーID: ${data.errorId}）` : "";
