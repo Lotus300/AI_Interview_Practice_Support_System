@@ -1,11 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "../src/server.mjs";
+import { buildRouter, createServer } from "../src/server.mjs";
 import { resetDb } from "../src/store.mjs";
+import { createDeterministicInterviewAiService } from "../src/features/interviews/service.mjs";
+import { createFeedback, finishFeedbackJob } from "../src/features/feedback/service.mjs";
+
+let queuedJobId;
+const dispatcher = { async enqueue(job) { queuedJobId = job.id; return { pollingUrl: `/api/v1/jobs/${job.id}` }; } };
 
 async function withServer(run) {
   resetDb();
-  const server = createServer();
+  queuedJobId = null;
+  const server = createServer({ router: buildRouter({ aiService: createDeterministicInterviewAiService(), feedbackDispatcher: dispatcher }) });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   try {
@@ -39,7 +45,10 @@ test("ログインからフィードバック取得まで完走できる", () =>
   assert.equal(next.question.type, "deep_dive");
   await request(`/interview-sessions/${session.id}/finish`, { method: "POST", body: "{}" });
   const { job } = await request(`/interview-sessions/${session.id}/feedback`, { method: "POST", body: "{}" });
-  assert.equal(job.status, "succeeded");
+  assert.equal(job.status, "queued");
+  assert.equal(queuedJobId, job.id);
+  await finishFeedbackJob(job.id, { generateFeedback: async current => createFeedback(current) });
+  assert.equal((await request(`/jobs/${job.id}`)).job.status, "succeeded");
   const result = await request(`/interview-sessions/${session.id}/feedback`);
   assert.equal(result.feedbackStatus, "succeeded");
   assert.ok(result.feedback.summary);

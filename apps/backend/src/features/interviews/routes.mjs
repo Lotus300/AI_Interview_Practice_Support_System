@@ -1,6 +1,6 @@
 import { readJson, sendJson, sendNoContent } from "../../http.mjs";
 import { createId, getDataStore, nowIso, seedInterviewSession } from "../../store.mjs";
-import { analyzeAnswer, appendUtterance, createInitialQuestion, createNextQuestion } from "./service.mjs";
+import { appendUtterance, createInterviewAiService } from "./service.mjs";
 import { sessionStatuses } from "../../../../../packages/shared/src/constants.mjs";
 import { findOwnedSession, sendResourceError } from "../../core/resources.mjs";
 import { numberInRange, optionalText, requireText } from "../../core/validation.mjs";
@@ -12,7 +12,7 @@ async function owned(res, sessionId, userId) {
   return found;
 }
 
-export function registerInterviewRoutes(router) {
+export function registerInterviewRoutes(router, { aiService = createInterviewAiService() } = {}) {
   router.add("GET", "/api/v1/interview-sessions", async (_req, res, ctx) => {
     const sessions = await (await getDataStore()).listSessions(ctx.user.id);
     sendJson(res, 200, { sessions });
@@ -53,7 +53,7 @@ export function registerInterviewRoutes(router) {
       return sendJson(res, 200, { question: found.session.questions.at(-1), sessionStatus: found.session.status });
     }
     const store = await getDataStore();
-    const question = createInitialQuestion(await store.getProfile(ctx.user.id), found.session);
+    const question = await aiService.initialQuestion(await store.getProfile(ctx.user.id), found.session);
     found.session.questions.push(question);
     appendUtterance(found.session, "ai", question.text, question.type);
     found.session.status = sessionStatuses.WAITING_ANSWER;
@@ -65,13 +65,16 @@ export function registerInterviewRoutes(router) {
   router.add("POST", "/api/v1/interview-sessions/:sessionId/answers", async (req, res, ctx, params) => {
     const found = await owned(res, params.sessionId, ctx.user.id);
     if (!found.session) return;
+    if (found.session.status !== sessionStatuses.WAITING_ANSWER) throw new ApiError(409, "INVALID_STATE", "現在は回答を送信できません");
     const body = await readJson(req);
     const text = requireText(body.answerText ?? body.transcript, "回答", 8000);
     const store = await getDataStore();
-    const analysis = analyzeAnswer(await store.getProfile(ctx.user.id), found.session, text);
+    const currentQuestion = found.session.questions.at(-1);
+    if (!currentQuestion || (body.questionId && body.questionId !== currentQuestion.id)) throw new ApiError(409, "INVALID_STATE", "表示中の質問に回答してください");
+    const analysis = await aiService.analyze(await store.getProfile(ctx.user.id), found.session, text);
     const answer = {
       id: createId("ans"),
-      questionId: body.questionId ?? found.session.questions.at(-1)?.id,
+      questionId: currentQuestion.id,
       text,
       inputType: body.inputType ?? "text",
       speechTranscriptConfidence: body.confidence ?? null,
@@ -90,18 +93,24 @@ export function registerInterviewRoutes(router) {
     const found = await owned(res, params.sessionId, ctx.user.id);
     if (!found.session) return;
     if (!found.session.answers.length) throw new ApiError(409, "INVALID_STATE", "回答を送信してから次の質問へ進んでください");
-    const question = createNextQuestion(found.session.answers.at(-1).analysis, found.session);
+    if (found.session.questions.length > found.session.answers.length) {
+      return sendJson(res, 200, { question: found.session.questions.at(-1), sessionStatus: found.session.status });
+    }
+    if (found.session.status !== sessionStatuses.ANSWER_ANALYZING) throw new ApiError(409, "INVALID_STATE", "現在は次の質問を生成できません");
+    const store = await getDataStore();
+    const question = await aiService.nextQuestion(await store.getProfile(ctx.user.id), found.session);
     found.session.questions.push(question);
     appendUtterance(found.session, "ai", question.text, question.type);
     found.session.status = sessionStatuses.WAITING_ANSWER;
     found.session.updatedAt = nowIso();
-    await (await getDataStore()).saveSession(found.session);
+    await store.saveSession(found.session);
     sendJson(res, 200, { question, sessionStatus: found.session.status });
   });
 
   router.add("POST", "/api/v1/interview-sessions/:sessionId/finish", async (_req, res, ctx, params) => {
     const found = await owned(res, params.sessionId, ctx.user.id);
     if (!found.session) return;
+    if (found.session.status === sessionStatuses.FINISHED) return sendJson(res, 200, { session: found.session });
     found.session.status = sessionStatuses.FINISHED;
     found.session.finishedAt = nowIso();
     found.session.updatedAt = nowIso();

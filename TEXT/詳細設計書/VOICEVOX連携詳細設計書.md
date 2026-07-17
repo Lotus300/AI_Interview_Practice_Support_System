@@ -12,7 +12,7 @@
 |---|---|
 | 音声出力 | VOICEVOX Engine API |
 | 配置 | MVP配置時はCloud Run別サービス |
-| 開発時 | ローカルVOICEVOX Engine利用可 |
+| 開発・本番 | Cloud Run CPU版VOICEVOX Engineを共通利用 |
 | 呼び出し元 | Cloud Run Backend API |
 | ブラウザ直接呼び出し | しない |
 | 音声保存 | 保存しない |
@@ -43,13 +43,7 @@ Browser
 | `VOICEVOX_DEFAULT_SPEAKER_ID` | Backend API | 既定話者ID |
 | `VOICEVOX_TIMEOUT_MS` | Backend API | タイムアウト |
 
-開発時の例:
-
-```text
-VOICEVOX_BASE_URL=http://localhost:50021
-```
-
-Cloud Run配置時の例:
+設定例:
 
 ```text
 VOICEVOX_BASE_URL=https://voicevox-engine-xxxxx.a.run.app

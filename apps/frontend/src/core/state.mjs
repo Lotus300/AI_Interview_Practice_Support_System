@@ -11,6 +11,7 @@ export const state = {
   answerDraft: "",
   feedback: null,
   feedbackStatus: "not_started",
+  feedbackJobId: null,
   speechStatus: "idle",
   busy: false,
   message: "",
@@ -32,6 +33,7 @@ export function clearInterviewState() {
     answerDraft: "",
     feedback: null,
     feedbackStatus: "not_started",
+    feedbackJobId: null,
     speechStatus: "idle"
   });
 }

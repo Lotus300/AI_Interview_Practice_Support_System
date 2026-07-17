@@ -1,6 +1,7 @@
 import { createId, getDataStore, nowIso } from "../../store.mjs";
 import { feedbackStatuses } from "../../../../../packages/shared/src/constants.mjs";
 import { buildFeedbackEvidence, excerpt } from "./evidence.mjs";
+import { createVertexClient } from "../interviews/vertex-client.mjs";
 
 function noAnswerFeedback(session) {
   return {
@@ -71,21 +72,62 @@ export function createFeedback(session) {
   };
 }
 
-export async function finishFeedbackJob(jobId) {
+const feedbackSchema = {
+  type: "OBJECT",
+  properties: {
+    summary: { type: "STRING" },
+    goodPoints: { type: "ARRAY", items: { type: "STRING" } },
+    abstractPoints: { type: "ARRAY", items: { type: "STRING" } },
+    contradictionCandidates: { type: "ARRAY", items: { type: "STRING" } },
+    improvementExample: { type: "STRING" }
+  },
+  required: ["summary", "goodPoints", "abstractPoints", "contradictionCandidates", "improvementExample"]
+};
+
+export function createVertexFeedbackGenerator({ vertex = createVertexClient() } = {}) {
+  return async session => {
+    const evidence = buildFeedbackEvidence(session);
+    if (!evidence.length) return noAnswerFeedback(session);
+    const result = await vertex.generateJson({
+      systemInstruction: "あなたは日本語の面接練習フィードバック担当です。実際の質問と回答だけを根拠にしてください。入力にない実績、数値、感情、話し方を捏造しないでください。矛盾は断定せず確認候補として表現してください。",
+      responseSchema: feedbackSchema,
+      maxOutputTokens: 4096,
+      prompt: `次の面接条件、プロフィール、質問と回答から具体的なフィードバックを作成してください。\n${JSON.stringify({ condition: session.condition, evidence })}`
+    });
+    return {
+      id: createId("fb"), sessionId: session.id, assessmentStatus: "assessed", evaluatedAnswerCount: evidence.length,
+      ...result, evidence: evidence.map(({ analysis, ...item }) => item), createdAt: nowIso()
+    };
+  };
+}
+
+export async function finishFeedbackJob(jobId, { generateFeedback = createVertexFeedbackGenerator() } = {}) {
   const store = await getDataStore();
   const job = await store.getJob(jobId);
   if (!job) return null;
+  if (job.status === feedbackStatuses.SUCCEEDED) return job;
   const session = await store.getSession(job.sessionId);
-  if (!session) {
-    Object.assign(job, { status: feedbackStatuses.FAILED, errorMessage: "Session not found", updatedAt: nowIso() });
+  if (!session || session.userId !== job.userId) {
+    Object.assign(job, { status: feedbackStatuses.FAILED, progress: 100, error: { code: "SESSION_NOT_FOUND", message: "Session not found", retryable: false }, updatedAt: nowIso() });
     await store.saveJob(job);
     return job;
   }
-  Object.assign(job, { status: feedbackStatuses.RUNNING, updatedAt: nowIso() });
-  const feedback = createFeedback(session);
-  feedback.userId = job.userId;
-  Object.assign(session, { feedbackStatus: feedbackStatuses.SUCCEEDED, summary: feedback.summary, updatedAt: nowIso() });
-  Object.assign(job, { status: feedbackStatuses.SUCCEEDED, result: { sessionId: session.id, feedbackId: feedback.id }, updatedAt: nowIso() });
-  await Promise.all([store.saveFeedback(feedback), store.saveSession(session), store.saveJob(job)]);
+  Object.assign(job, { status: feedbackStatuses.RUNNING, progress: 10, startedAt: job.startedAt || nowIso(), updatedAt: nowIso(), error: null });
+  await store.saveJob(job);
+  try {
+    job.progress = 30;
+    await store.saveJob(job);
+    const feedback = await generateFeedback(session);
+    feedback.userId = job.userId;
+    job.progress = 80;
+    await store.saveJob(job);
+    Object.assign(session, { feedbackStatus: feedbackStatuses.SUCCEEDED, summary: feedback.summary, updatedAt: nowIso() });
+    Object.assign(job, { status: feedbackStatuses.SUCCEEDED, progress: 100, result: { sessionId: session.id, feedbackId: feedback.id }, completedAt: nowIso(), updatedAt: nowIso() });
+    await Promise.all([store.saveFeedback(feedback), store.saveSession(session), store.saveJob(job)]);
+  } catch (error) {
+    Object.assign(session, { feedbackStatus: feedbackStatuses.FAILED, updatedAt: nowIso() });
+    Object.assign(job, { status: feedbackStatuses.FAILED, progress: 100, error: { code: error.code || "FEEDBACK_GENERATION_FAILED", message: "フィードバック生成に失敗しました", retryable: true }, updatedAt: nowIso() });
+    await Promise.all([store.saveSession(session), store.saveJob(job)]);
+  }
   return job;
 }

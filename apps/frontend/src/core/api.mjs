@@ -30,5 +30,6 @@ export const interviewApi = {
   nextQuestion: (id) => api(`/interview-sessions/${id}/next-question`, { method: "POST", body: "{}" }),
   finish: (id) => api(`/interview-sessions/${id}/finish`, { method: "POST", body: "{}" }),
   startFeedback: (id) => api(`/interview-sessions/${id}/feedback`, { method: "POST", body: "{}" }),
+  job: (id) => api(`/jobs/${id}`),
   feedback: (id) => api(`/interview-sessions/${id}/feedback`)
 };

@@ -1,4 +1,5 @@
 import { createId, nowIso } from "../../store.mjs";
+import { createVertexClient } from "./vertex-client.mjs";
 
 export function createInitialQuestion(profile, session) {
   const name = profile?.fullName || "応募者";
@@ -41,4 +42,58 @@ export function appendUtterance(session, role, text, type) {
   const utterance = { id: createId("utt"), role, type, text, sequenceNo: session.utterances.length + 1, createdAt: nowIso() };
   session.utterances.push(utterance);
   return utterance;
+}
+
+const textSchema = { type: "OBJECT", properties: { text: { type: "STRING" }, type: { type: "STRING" } }, required: ["text", "type"] };
+const analysisSchema = {
+  type: "OBJECT",
+  properties: {
+    abstractionLevel: { type: "STRING", enum: ["low", "medium", "high"] },
+    abstractHints: { type: "ARRAY", items: { type: "STRING" } },
+    contradictionCandidates: { type: "ARRAY", items: { type: "STRING" } },
+    needsDeepDive: { type: "BOOLEAN" },
+    recommendedFocus: { type: "STRING" }
+  },
+  required: ["abstractionLevel", "abstractHints", "contradictionCandidates", "needsDeepDive", "recommendedFocus"]
+};
+
+function context(profile, session) {
+  return JSON.stringify({ profile, condition: session.condition, conversation: session.utterances?.map(item => ({ role: item.role, text: item.text })) || [] });
+}
+
+export function createInterviewAiService({ vertex = createVertexClient() } = {}) {
+  const systemInstruction = "あなたは日本語の面接練習を支援する面接官です。入力データだけを根拠にし、個人情報を推測せず、矛盾は断定せず確認候補として扱ってください。JSONスキーマに従ってください。";
+  return {
+    async initialQuestion(profile, session) {
+      const result = await vertex.generateJson({
+        systemInstruction,
+        responseSchema: textSchema,
+        prompt: `次のプロフィールと面接条件に合う最初の質問を1つ作成してください。経歴と志望理由を自然に確認してください。\n${context(profile, session)}`
+      });
+      return { id: createId("q"), type: result.type || "initial", text: result.text, createdAt: nowIso() };
+    },
+    async analyze(profile, session, answerText) {
+      return vertex.generateJson({
+        systemInstruction,
+        responseSchema: analysisSchema,
+        prompt: `直前の質問と回答を分析してください。数値の有無だけで機械的に断定せず、具体性と整合性を評価してください。\n回答: ${JSON.stringify(answerText)}\n${context(profile, session)}`
+      });
+    },
+    async nextQuestion(profile, session) {
+      const result = await vertex.generateJson({
+        systemInstruction,
+        responseSchema: textSchema,
+        prompt: `会話の直前の回答に関連する次の質問を1つ作成してください。必要なら深掘りし、同じ質問を繰り返さないでください。\n${context(profile, session)}`
+      });
+      return { id: createId("q"), type: result.type || "normal", text: result.text, createdAt: nowIso() };
+    }
+  };
+}
+
+export function createDeterministicInterviewAiService() {
+  return {
+    initialQuestion: async (profile, session) => createInitialQuestion(profile, session),
+    analyze: async (profile, session, answerText) => analyzeAnswer(profile, session, answerText),
+    nextQuestion: async (_profile, session) => createNextQuestion(session.answers.at(-1)?.analysis, session)
+  };
 }

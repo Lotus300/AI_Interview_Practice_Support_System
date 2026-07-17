@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createVoicevoxClient } from "../src/features/media/voicevox-client.mjs";
 
-test("ローカルVOICEVOX APIへ正しいクエリとJSONを送る", async () => {
+test("VOICEVOX Engine APIへ正しいクエリとJSONを送る", async () => {
   const requests = [];
   const fetchImpl = async (url, options) => {
     requests.push({ url, options });
