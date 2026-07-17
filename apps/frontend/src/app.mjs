@@ -127,18 +127,34 @@ async function submitAnswer() {
   }
 }
 
+async function startFeedback() {
+  state.screen = "feedback";
+  state.feedback = null;
+  state.feedbackStatus = "queued";
+  state.feedbackJobId = null;
+  state.busy = true;
+  render();
+  try {
+    const { job } = await interviewApi.startFeedback(state.session.id);
+    state.feedbackStatus = job.status;
+    state.feedbackJobId = job.id;
+    state.busy = false;
+    const generation = ++feedbackPollingGeneration;
+    render();
+    await pollFeedbackJob(job.id, generation);
+  } catch (error) {
+    state.feedbackStatus = "failed";
+    state.busy = false;
+    notify(`${error.message} 面接履歴は保存されています。再試行できます。`, "error");
+    render();
+  }
+}
+
 async function finishInterview() {
   state.busy = true;
   render();
   state.session = (await interviewApi.finish(state.session.id)).session;
-  const { job } = await interviewApi.startFeedback(state.session.id);
-  state.feedbackStatus = job.status;
-  state.feedbackJobId = job.id;
-  state.screen = "feedback";
-  state.busy = false;
-  const generation = ++feedbackPollingGeneration;
-  render();
-  await pollFeedbackJob(job.id, generation);
+  await startFeedback();
 }
 
 async function loadFeedbackResult() {
@@ -205,6 +221,7 @@ const actionHandlers = {
   "submit-answer": submitAnswer,
   "confirm-finish": async () => { state.screen = "finish"; },
   finish: finishInterview,
+  "retry-feedback": startFeedback,
   "load-feedback": async () => {
     state.busy = true;
     const generation = ++feedbackPollingGeneration;

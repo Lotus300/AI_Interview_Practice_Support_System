@@ -6,6 +6,7 @@ import {
   createFeedback,
   createInitialQuestion,
   createNextQuestion,
+  ensureDistinctQuestion,
   finishFeedbackJob
 } from "../src/services.mjs";
 import { db, getDataStore, resetDb, seedInterviewSession } from "../src/store.mjs";
@@ -27,6 +28,18 @@ test("短く数値のない回答は深掘り対象になる", () => {
   assert.equal(analysis.abstractionLevel, "high");
   assert.equal(analysis.abstractHints.length, 2);
   assert.equal(createNextQuestion(analysis, { condition: {} }).type, "deep_dive");
+});
+
+test("生成結果が既出質問と同じ場合は異なる質問へ置き換える", () => {
+  const session = {
+    questions: [{ id: "q_1", text: "これまでの経験を教えてください。" }],
+    condition: { theme: "総合面接" }
+  };
+
+  const question = ensureDistinctQuestion({ id: "q_2", type: "normal", text: "これまでの経験を教えてください。" }, session);
+
+  assert.notEqual(question.text, session.questions[0].text);
+  assert.equal(question.type, "fallback");
 });
 
 test("実際の質問と回答からフィードバックを生成する", async () => {
