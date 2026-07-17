@@ -14,6 +14,26 @@ export const config = {
     clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",
     redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI || "http://localhost:8080/api/v1/auth/google/callback"
   },
+  speech: {
+    location: process.env.SPEECH_LOCATION || "asia-northeast1",
+    recognizer: process.env.SPEECH_RECOGNIZER || "_",
+    model: process.env.SPEECH_MODEL || "chirp_3",
+    languageCode: process.env.SPEECH_LANGUAGE_CODE || "ja-JP",
+    timeoutMs: Number(process.env.SPEECH_TIMEOUT_MS || 30000),
+    maxAudioBytes: Number(process.env.SPEECH_MAX_AUDIO_BYTES || 10000000)
+  },
+  vertexAi: {
+    location: process.env.VERTEX_AI_LOCATION || "asia-northeast1",
+    model: process.env.VERTEX_AI_MODEL || "gemini-2.5-flash",
+    timeoutMs: Number(process.env.VERTEX_AI_TIMEOUT_MS || 60000)
+  },
+  feedbackTasks: {
+    enabled: process.env.FEEDBACK_TASKS_ENABLED === "true",
+    location: process.env.FEEDBACK_TASKS_LOCATION || process.env.GCP_REGION || "asia-northeast1",
+    queue: process.env.FEEDBACK_TASKS_QUEUE || "feedback-generation",
+    serviceUrl: process.env.FEEDBACK_TASKS_SERVICE_URL || process.env.APP_ORIGIN || "",
+    serviceAccountEmail: process.env.FEEDBACK_TASKS_SERVICE_ACCOUNT || ""
+  },
   voicevox: {
     baseUrl: process.env.VOICEVOX_BASE_URL || "",
     authMode: process.env.VOICEVOX_AUTH_MODE || "none",

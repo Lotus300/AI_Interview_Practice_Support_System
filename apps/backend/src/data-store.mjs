@@ -47,6 +47,12 @@ export class MemoryDataStore {
   async findActiveFeedbackJob(sessionId, statuses) {
     return clone([...this.collections.jobs.values()].find(job => job.sessionId === sessionId && statuses.includes(job.status)) ?? null);
   }
+  async createFeedbackJobIfAbsent(job, statuses) {
+    const existing = [...this.collections.jobs.values()].find(item => item.sessionId === job.sessionId && item.userId === job.userId && statuses.includes(item.status));
+    if (existing) return { job: clone(existing), created: false };
+    this.collections.jobs.set(job.id, clone(job));
+    return { job: clone(job), created: true };
+  }
   async saveJob(job) { this.collections.jobs.set(job.id, clone(job)); return clone(job); }
   async getFeedback(sessionId) { return clone(this.collections.feedbacks.get(sessionId) ?? null); }
   async saveFeedback(feedback) { this.collections.feedbacks.set(feedback.sessionId, clone(feedback)); return clone(feedback); }
@@ -152,6 +158,22 @@ export async function createFirestoreDataStore({ projectId, databaseId = "(defau
     async findActiveFeedbackJob(sessionId, statuses) {
       const result = await firestore.collection("jobs").where("sessionId", "==", sessionId).get();
       return fromFirestore(result.docs.map(item => item.data()).find(job => statuses.includes(job.status)) ?? null);
+    },
+    async createFeedbackJobIfAbsent(job, statuses) {
+      const lockRef = firestore.collection("feedbackJobLocks").doc(job.sessionId);
+      const jobRef = firestore.collection("jobs").doc(job.id);
+      return firestore.runTransaction(async transaction => {
+        const lockSnapshot = await transaction.get(lockRef);
+        if (lockSnapshot.exists) {
+          const lock = fromFirestore(lockSnapshot.data());
+          const activeSnapshot = await transaction.get(firestore.collection("jobs").doc(lock.jobId));
+          const active = activeSnapshot.exists ? fromFirestore(activeSnapshot.data()) : null;
+          if (active && active.userId === job.userId && statuses.includes(active.status)) return { job: active, created: false };
+        }
+        transaction.set(jobRef, toFirestore(job));
+        transaction.set(lockRef, toFirestore({ jobId: job.id, userId: job.userId, updatedAt: job.updatedAt }));
+        return { job, created: true };
+      });
     },
     async saveJob(job) { await setDocument("jobs", job.id, job); return job; },
     async getFeedback(sessionId) { return document("feedbacks", sessionId); },

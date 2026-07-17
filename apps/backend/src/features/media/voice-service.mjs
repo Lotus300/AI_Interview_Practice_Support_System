@@ -30,7 +30,7 @@ export function createVoiceService({
   return {
     async synthesize({ userId, text, speaker, speedScale, volumeScale, preview = false }) {
       if (!client.configured) {
-        return { aiResponseStatus: "text_only", text, voice: null, reason: "VOICEVOX_NOT_CONFIGURED", provider: "local_mock" };
+        return { aiResponseStatus: "text_only", text, voice: null, reason: "VOICEVOX_NOT_CONFIGURED", provider: "unavailable" };
       }
       try {
         const speakerId = speakerIds[speaker] ?? defaultSpeakerId;

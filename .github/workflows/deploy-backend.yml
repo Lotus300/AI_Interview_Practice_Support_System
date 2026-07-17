@@ -106,6 +106,17 @@ jobs:
             FIRESTORE_DATABASE_ID=(default)
             APP_ORIGIN=${{ vars.APP_ORIGIN }}
             GOOGLE_OAUTH_REDIRECT_URI=${{ vars.APP_ORIGIN }}/api/v1/auth/google/callback
+            SPEECH_LOCATION=asia-northeast1
+            SPEECH_RECOGNIZER=_
+            SPEECH_MODEL=chirp_3
+            SPEECH_LANGUAGE_CODE=ja-JP
+            VERTEX_AI_LOCATION=asia-northeast1
+            VERTEX_AI_MODEL=gemini-2.5-flash
+            FEEDBACK_TASKS_ENABLED=true
+            FEEDBACK_TASKS_LOCATION=asia-northeast1
+            FEEDBACK_TASKS_QUEUE=feedback-generation
+            FEEDBACK_TASKS_SERVICE_URL=${{ vars.APP_ORIGIN }}
+            FEEDBACK_TASKS_SERVICE_ACCOUNT=${{ vars.FEEDBACK_TASKS_SERVICE_ACCOUNT }}
             VOICEVOX_BASE_URL=${{ vars.VOICEVOX_BASE_URL }}
             VOICEVOX_AUTH_MODE=google
             VOICEVOX_DEFAULT_SPEAKER_ID=13

@@ -1,20 +1,18 @@
 import { readJson, sendBuffer, sendJson } from "../../http.mjs";
 import { numberInRange, requireChoice, requireText } from "../../core/validation.mjs";
 import { createVoiceService, speakerIds } from "./voice-service.mjs";
+import { config } from "../../config.mjs";
+import { readSpeechInput } from "./multipart.mjs";
+import { createSpeechService } from "./speech-service.mjs";
+import { findOwnedSession, sendResourceError } from "../../core/resources.mjs";
 
-export function registerMediaRoutes(router, { voiceService = createVoiceService() } = {}) {
-  router.add("POST", "/api/v1/speech/recognize", async (req, res) => {
-    const contentType = req.headers["content-type"] || "";
-    if (!contentType.includes("multipart/form-data") && !contentType.includes("application/json")) {
-      return sendJson(res, 400, { code: "VALIDATION_ERROR", message: "multipart/form-data or json is required" });
-    }
-    sendJson(res, 200, {
-      speechInputStatus: "recognized",
-      transcript: "私は前職で問い合わせ対応の集計を自動化し、月6時間の作業削減につなげました。",
-      confidence: 0.91,
-      alternatives: [],
-      provider: "local_mock"
-    });
+export function registerMediaRoutes(router, { voiceService = createVoiceService(), speechService = createSpeechService() } = {}) {
+  router.add("POST", "/api/v1/speech/recognize", async (req, res, { user }) => {
+    const input = await readSpeechInput(req, config.speech.maxAudioBytes);
+    const sessionId = requireText(input.sessionId, "面接セッションID", 100);
+    const found = await findOwnedSession(sessionId, user.id);
+    if (found.error) return sendResourceError(res, sendJson, found.error);
+    sendJson(res, 200, await speechService.recognize(input));
   });
 
   router.add("POST", "/api/v1/voice/synthesize", async (req, res, { user }) => {

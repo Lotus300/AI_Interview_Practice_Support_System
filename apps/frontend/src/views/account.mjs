@@ -12,7 +12,7 @@ function profileForm(initialSetup) {
 }
 
 export function renderProfile() {
-  const initial = !state.user?.profileCompleted;
+  const initial = !state.profile && !state.user?.profileCompleted;
   return layout(profileForm(initial), { eyebrow: initial ? "WELCOME" : "SETTINGS", title: initial ? "最初にプロフィールを登録" : "プロフィール設定" });
 }
 

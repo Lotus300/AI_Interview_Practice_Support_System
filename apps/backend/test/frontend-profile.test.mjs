@@ -19,3 +19,31 @@ test("初期プロフィールで卒業状況を選択できる", () => {
   assert.match(html, /value="卒業見込み"/);
   assert.match(html, /保存してホームへ/);
 });
+
+test("保存済みプロフィールを入力欄の初期値として表示する", () => {
+  Object.assign(state, {
+    user: { name: "テストユーザー", profileCompleted: false },
+    profile: {
+      fullName: "山田 & 花子",
+      desiredRole: "バックエンドエンジニア",
+      education: "テスト大学",
+      faculty: "情報学部",
+      graduationStatus: "卒業見込み",
+      workHistory: "開発 <運用> 経験",
+      selfPr: "改善を継続できます"
+    },
+    busy: false
+  });
+
+  const html = renderProfile();
+
+  assert.match(html, /プロフィール設定/);
+  assert.match(html, /value="山田 &amp; 花子"/);
+  assert.match(html, /value="バックエンドエンジニア"/);
+  assert.match(html, /value="テスト大学"/);
+  assert.match(html, /value="情報学部"/);
+  assert.match(html, /value="卒業見込み" selected/);
+  assert.match(html, />開発 &lt;運用&gt; 経験<\/textarea>/);
+  assert.match(html, />改善を継続できます<\/textarea>/);
+  assert.match(html, /変更を保存/);
+});

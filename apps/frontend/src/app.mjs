@@ -14,7 +14,14 @@ async function refreshMe() {
     const [{ profile }, { settings }, { sessions }] = await Promise.all([
       api("/profile"), api("/settings"), interviewApi.list()
     ]);
-    Object.assign(state, { profile, settings, sessions, screen: user.profileCompleted ? "home" : "profile" });
+    const hasSavedProfile = Boolean(profile);
+    Object.assign(state, {
+      profile,
+      settings,
+      sessions,
+      user: hasSavedProfile ? { ...user, profileCompleted: true } : user,
+      screen: user.profileCompleted || hasSavedProfile ? "home" : "profile"
+    });
   } catch {
     state.user = null;
     state.screen = "login";
@@ -22,16 +29,24 @@ async function refreshMe() {
 }
 
 async function navigate(screen) {
+  if (screen !== "feedback") feedbackPollingGeneration += 1;
   state.drawerOpen = false;
   if (screen !== "settings") state.voiceSettingsDraft = null;
   if (screen === "history" || screen === "home") state.sessions = (await interviewApi.list()).sessions;
-  if (screen === "profile") state.profile = (await api("/profile")).profile;
+  if (screen === "profile") {
+    const { profile } = await api("/profile");
+    state.profile = profile;
+    if (profile && state.user) state.user = { ...state.user, profileCompleted: true };
+  }
   if (screen === "settings") {
     state.settings = (await api("/settings")).settings;
     state.voiceSettingsDraft = { ...state.settings };
   }
   state.screen = screen;
 }
+
+let feedbackPollingGeneration = 0;
+const feedbackPollingIntervalMs = 3000;
 
 async function handleLogin() {
   state.busy = true;
@@ -118,12 +133,15 @@ async function finishInterview() {
   state.session = (await interviewApi.finish(state.session.id)).session;
   const { job } = await interviewApi.startFeedback(state.session.id);
   state.feedbackStatus = job.status;
+  state.feedbackJobId = job.id;
   state.screen = "feedback";
   state.busy = false;
-  setTimeout(loadFeedback, 500);
+  const generation = ++feedbackPollingGeneration;
+  render();
+  await pollFeedbackJob(job.id, generation);
 }
 
-async function loadFeedback() {
+async function loadFeedbackResult() {
   try {
     const data = await interviewApi.feedback(state.session.id);
     state.feedback = data.feedback;
@@ -134,6 +152,27 @@ async function loadFeedback() {
     state.busy = false;
     notify(error.message, "error");
     render();
+  }
+}
+
+async function pollFeedbackJob(jobId = state.feedbackJobId, generation = feedbackPollingGeneration) {
+  if (!jobId || generation !== feedbackPollingGeneration || state.screen !== "feedback") return;
+  try {
+    const { job } = await interviewApi.job(jobId);
+    if (generation !== feedbackPollingGeneration || state.screen !== "feedback") return;
+    state.feedbackStatus = job.status;
+    state.busy = false;
+    render();
+    if (job.status === "succeeded") return loadFeedbackResult();
+    if (job.status === "failed") {
+      notify(job.error?.message || "フィードバック生成に失敗しました。再度お試しください。", "error");
+      return render();
+    }
+    setTimeout(() => pollFeedbackJob(jobId, generation), feedbackPollingIntervalMs);
+  } catch (error) {
+    if (generation !== feedbackPollingGeneration || state.screen !== "feedback") return;
+    notify(`${error.message} 状態を再確認します。`, "error");
+    setTimeout(() => pollFeedbackJob(jobId, generation), feedbackPollingIntervalMs);
   }
 }
 
@@ -166,7 +205,11 @@ const actionHandlers = {
   "submit-answer": submitAnswer,
   "confirm-finish": async () => { state.screen = "finish"; },
   finish: finishInterview,
-  "load-feedback": async () => { state.busy = true; await loadFeedback(); },
+  "load-feedback": async () => {
+    state.busy = true;
+    const generation = ++feedbackPollingGeneration;
+    await pollFeedbackJob(state.feedbackJobId, generation);
+  },
   "open-history": (target) => openHistory(target.dataset.id),
   "delete-session": deleteSession
 };
