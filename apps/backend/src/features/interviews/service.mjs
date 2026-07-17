@@ -35,7 +35,45 @@ export function createNextQuestion(lastAnalysis, session) {
   const text = lastAnalysis?.needsDeepDive
     ? `先ほどの回答について、${lastAnalysis.recommendedFocus}観点でもう少し詳しく説明してください。`
     : `次に、${session.condition?.theme || "今回のテーマ"}に関連して、困難をどう乗り越えたか教えてください。`;
-  return { id: createId("q"), type: lastAnalysis?.needsDeepDive ? "deep_dive" : "normal", text, createdAt: nowIso() };
+  return ensureDistinctQuestion({ id: createId("q"), type: lastAnalysis?.needsDeepDive ? "deep_dive" : "normal", text, createdAt: nowIso() }, session);
+}
+
+const fallbackQuestionTexts = [
+  "直前の回答で、あなた自身が担当した部分と具体的な行動を教えてください。",
+  "その経験で最も難しかった点と、解決のために工夫したことを教えてください。",
+  "その取り組みの結果を、数値や周囲の反応を含めて教えてください。",
+  "その経験から得た学びを、希望する仕事でどのように活かしますか。",
+  "周囲と意見が異なった場面で、どのように合意形成したか教えてください。",
+  "期限や制約がある中で、優先順位をどのように決めましたか。",
+  "失敗や想定外の問題が起きたとき、どのように立て直しましたか。",
+  "自分の強みが最も発揮された具体的な場面を教えてください。",
+  "今後さらに伸ばしたい能力と、そのために取り組んでいることを教えてください。",
+  "入社後に実現したいことと、その理由を具体的に教えてください。"
+];
+
+function normalizeQuestion(text) {
+  return String(text || "").normalize("NFKC").toLowerCase().replace(/[\s、。！？!?・「」『』（）()［］\[\]]/g, "");
+}
+
+function isQuestionUsed(session, text) {
+  const normalized = normalizeQuestion(text);
+  return !normalized || session.questions?.some(question => normalizeQuestion(question.text) === normalized);
+}
+
+export function ensureDistinctQuestion(question, session) {
+  if (!isQuestionUsed(session, question?.text)) return question;
+
+  const start = Math.max(0, (session.questions?.length || 1) - 1);
+  for (let offset = 0; offset < fallbackQuestionTexts.length; offset += 1) {
+    const text = fallbackQuestionTexts[(start + offset) % fallbackQuestionTexts.length];
+    if (!isQuestionUsed(session, text)) return { ...question, type: "fallback", text };
+  }
+
+  return {
+    ...question,
+    type: "fallback",
+    text: `${(session.questions?.length || 0) + 1}つ目の観点として、これまでの回答とは異なる経験から、あなたの判断と行動を教えてください。`
+  };
 }
 
 export function appendUtterance(session, role, text, type) {
@@ -83,9 +121,9 @@ export function createInterviewAiService({ vertex = createVertexClient() } = {})
       const result = await vertex.generateJson({
         systemInstruction,
         responseSchema: textSchema,
-        prompt: `会話の直前の回答に関連する次の質問を1つ作成してください。必要なら深掘りし、同じ質問を繰り返さないでください。\n${context(profile, session)}`
+        prompt: `会話の直前の回答に関連する第${session.questions.length + 1}問を1つ作成してください。過去に提示した質問と同じ文面や同じ論点を繰り返さず、必要なら直前の回答を深掘りしてください。\n${context(profile, session)}`
       });
-      return { id: createId("q"), type: result.type || "normal", text: result.text, createdAt: nowIso() };
+      return ensureDistinctQuestion({ id: createId("q"), type: result.type || "normal", text: result.text, createdAt: nowIso() }, session);
     }
   };
 }

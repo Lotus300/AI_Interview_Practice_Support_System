@@ -31,6 +31,8 @@ h2 { margin-bottom: 8px; font-size: 19px; letter-spacing: -.02em; }
 .brand-mark, .avatar { display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; color: white; background: var(--blue); font-weight: 700; }
 .brand-mark { width: 36px; height: 36px; margin-right: 12px; font-size: 12px; }
 .brand { display: grid; margin-left: 12px; line-height: 1.25; }
+button.brand { padding: 4px 6px; border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+button.brand:hover, button.brand:focus-visible { background: var(--blue-soft); outline: none; }
 .brand strong { font-size: 14px; letter-spacing: .02em; }
 .brand span { color: var(--muted); font-size: 9px; letter-spacing: .13em; text-transform: uppercase; }
 .topbar-user { display: flex; align-items: center; gap: 12px; margin-left: auto; color: var(--muted); font-size: 12px; }

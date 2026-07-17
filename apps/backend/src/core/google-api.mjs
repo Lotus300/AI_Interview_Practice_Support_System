@@ -4,6 +4,9 @@ const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform";
 
 export function createGoogleApiClient({ auth = new GoogleAuth({ scopes: [cloudPlatformScope] }), fetchImpl = globalThis.fetch } = {}) {
   return {
+    async warmup() {
+      await auth.getAccessToken();
+    },
     async request(url, { method = "GET", body, headers = {}, signal } = {}) {
       const token = await auth.getAccessToken();
       const response = await fetchImpl(url, {

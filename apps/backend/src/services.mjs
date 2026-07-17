@@ -4,7 +4,8 @@ export {
   analyzeAnswer,
   appendUtterance,
   createInitialQuestion,
-  createNextQuestion
+  createNextQuestion,
+  ensureDistinctQuestion
 } from "./features/interviews/service.mjs";
 
 export { createFeedback, finishFeedbackJob } from "./features/feedback/service.mjs";

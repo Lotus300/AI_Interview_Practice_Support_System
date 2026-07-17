@@ -30,10 +30,12 @@ export function registerFeedbackRoutes(router, {
     const { job, created } = await store.createFeedbackJobIfAbsent(candidate, [feedbackStatuses.QUEUED, feedbackStatuses.RUNNING, feedbackStatuses.SUCCEEDED]);
     if (!created) return sendJson(res, 200, { job, pollingUrl: `/api/v1/jobs/${job.id}` });
     found.session.feedbackStatus = feedbackStatuses.QUEUED;
-    await store.saveSession(found.session);
     try {
-      const task = await dispatcher.enqueue(job);
-      sendJson(res, 202, { job, pollingUrl: task.pollingUrl });
+      const [task] = await Promise.all([
+        dispatcher.enqueue(job),
+        store.saveSession(found.session)
+      ]);
+      sendJson(res, 202, { job, pollingUrl: task.pollingUrl, registrationMs: task.registrationMs });
     } catch (error) {
       Object.assign(job, { status: feedbackStatuses.FAILED, error: { code: error.code || "QUEUE_ERROR", message: "ジョブの登録に失敗しました", retryable: true }, updatedAt: nowIso() });
       found.session.feedbackStatus = feedbackStatuses.FAILED;

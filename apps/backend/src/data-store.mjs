@@ -1,4 +1,4 @@
-import { defaultVoiceSettings } from "../../../packages/shared/src/constants.mjs";
+import { defaultVoiceSettings, sessionStatuses } from "../../../packages/shared/src/constants.mjs";
 
 function clone(value) {
   return value == null ? value : structuredClone(value);
@@ -39,7 +39,7 @@ export class MemoryDataStore {
   async getSession(id) { return clone(this.collections.sessions.get(id) ?? null); }
   async listSessions(userId) {
     return [...this.collections.sessions.values()]
-      .filter(item => item.userId === userId && !item.deletedAt)
+      .filter(item => item.userId === userId && item.status === sessionStatuses.FINISHED && !item.deletedAt)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(clone);
   }
   async saveSession(session) { this.collections.sessions.set(session.id, clone(session)); return clone(session); }
@@ -142,7 +142,8 @@ export async function createFirestoreDataStore({ projectId, databaseId = "(defau
     async listSessions(userId) {
       const result = await firestore.collection("interviewSessions").where("userId", "==", userId).get();
       return Promise.all(result.docs.map(item => fromFirestore(item.data()))).then(items => items
-        .filter(item => !item.deletedAt).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+        .filter(item => item.status === sessionStatuses.FINISHED && !item.deletedAt)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     },
     async saveSession(session) {
       const ref = firestore.collection("interviewSessions").doc(session.id);
