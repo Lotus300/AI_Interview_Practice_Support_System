@@ -56,15 +56,19 @@ test("一時音声は期限後に取得できない", () => {
 });
 
 test("VOICEVOX障害時はテキスト表示へフォールバックする", async () => {
+  let logged;
   const client = {
     configured: true,
     async createAudioQuery() { throw new Error("unavailable"); },
     async synthesize() { throw new Error("not reached"); }
   };
-  const service = createVoiceService({ client, logger: { error() {} } });
+  const service = createVoiceService({ client, logger: { error(message, details) { logged = { message, details }; } }, createErrorId: () => "voice-error-test" });
   const result = await service.synthesize({ userId: "user-1", text: "質問", speaker: "青山龍星", speedScale: 1, volumeScale: 1 });
   assert.equal(result.aiResponseStatus, "text_only");
   assert.equal(result.reason, "VOICEVOX_UNAVAILABLE");
+  assert.equal(result.errorStage, "audio_query");
+  assert.equal(result.errorId, "voice-error-test");
+  assert.equal(logged.details.errorId, "voice-error-test");
 });
 
 test("定型試聴は標準設定で一度だけ合成し、速度と音量をクライアント調整にする", async () => {

@@ -75,7 +75,8 @@ async function synthesizeVoice(text, settings = state.settings, { preview = fals
   const data = await api("/voice/synthesize", { method: "POST", body: JSON.stringify({ text, ...settings, preview }) });
   if (preview && previewRequest !== latestPreviewRequest) return;
   if (data.aiResponseStatus === "text_only") {
-    notify("音声エンジン未接続のため、テキスト表示で続けます。", "info");
+    const reference = data.errorId ? `（エラーID: ${data.errorId}）` : "";
+    notify(`音声を生成できなかったため、テキスト表示で続けます。${reference}`, "info");
     return;
   }
   if (data.voice?.playbackUrl) {

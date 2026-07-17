@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { config } from "../../config.mjs";
 import { createVoiceCache } from "./voice-cache.mjs";
 import { createSynthesisCache } from "./synthesis-cache.mjs";
@@ -25,19 +26,22 @@ export function createVoiceService({
     maxEntries: config.voicevox.previewCacheMaxEntries
   }),
   defaultSpeakerId = config.voicevox.defaultSpeakerId,
-  logger = console
+  logger = console,
+  createErrorId = () => crypto.randomUUID()
 } = {}) {
   return {
     async synthesize({ userId, text, speaker, speedScale, volumeScale, preview = false }) {
       if (!client.configured) {
         return { aiResponseStatus: "text_only", text, voice: null, reason: "VOICEVOX_NOT_CONFIGURED", provider: "unavailable" };
       }
+      let errorStage = "audio_query";
       try {
         const speakerId = speakerIds[speaker] ?? defaultSpeakerId;
         const createAudio = async () => {
           const audioQuery = await client.createAudioQuery({ text, speakerId });
           audioQuery.speedScale = preview ? 1 : speedScale;
           audioQuery.volumeScale = preview ? 1 : volumeScale;
+          errorStage = "synthesis";
           return client.synthesize({ audioQuery, speakerId });
         };
         const audio = preview
@@ -52,8 +56,16 @@ export function createVoiceService({
           playbackAdjustment: preview ? "client" : "synthesized"
         };
       } catch (error) {
-        logger.error("VOICEVOX synthesis failed", { name: error.name, message: error.message });
-        return { aiResponseStatus: "text_only", text, voice: null, reason: "VOICEVOX_UNAVAILABLE", provider: "voicevox" };
+        const errorId = createErrorId();
+        logger.error("VOICEVOX synthesis failed", {
+          errorId,
+          errorStage,
+          name: error.name,
+          message: error.message,
+          code: error.code,
+          statusCode: error.statusCode || error.response?.status
+        });
+        return { aiResponseStatus: "text_only", text, voice: null, reason: "VOICEVOX_UNAVAILABLE", errorStage, errorId, provider: "voicevox" };
       }
     },
     findPlayback(id, userId) {

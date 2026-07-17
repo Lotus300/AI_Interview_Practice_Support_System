@@ -35,15 +35,21 @@ test("Cloud TasksへOIDC付きフィードバックジョブを登録する", as
   const originalProject = config.gcpProjectId;
   config.gcpProjectId = "project-test";
   let request;
+  let warmedUp = false;
   try {
     const dispatcher = createCloudTasksDispatcher({
       settings: { enabled: true, location: "asia-northeast1", queue: "feedback-generation", serviceUrl: "https://service.example", serviceAccountEmail: "tasks@example.iam.gserviceaccount.com" },
-      googleApi: { async request(url, options) { request = { url, options }; return { name: "task-name" }; } }
+      logger: { info() {}, warn() {} },
+      googleApi: {
+        async warmup() { warmedUp = true; },
+        async request(url, options) { assert.equal(warmedUp, true); request = { url, options }; return { name: "task-name" }; }
+      }
     });
     const result = await dispatcher.enqueue({ id: "job_test" });
     assert.match(request.url, /cloudtasks\.googleapis\.com/);
     assert.equal(request.options.body.task.httpRequest.oidcToken.audience, "https://service.example");
     assert.equal(result.pollingUrl, "/api/v1/jobs/job_test");
+    assert.equal(typeof result.registrationMs, "number");
   } finally {
     config.gcpProjectId = originalProject;
   }
