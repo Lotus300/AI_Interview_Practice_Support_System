@@ -132,10 +132,11 @@ export function createInterviewAiService({ vertex = createVertexClient() } = {})
         prompt: `直前の質問と回答を次の順序で分析し、その分析に基づく第${session.questions.length + 1}問を1つ作成してください。
 
 分析要件:
-1. 回答の抽象度を low / medium / high で評価する。具体的であるほど low とする。
-2. 主体、状況、課題、本人の行動、判断理由、担当範囲、成果、数値、期間が不足している箇所を abstractHints に具体的に記載する。ただし、数値がないことだけで抽象的と断定しない。
-3. プロフィール、面接条件、過去の発言、直前の回答を比較し、不一致の可能性を contradictionCandidates に記載する。推測で矛盾を作らず、矛盾を事実として断定しない。
-4. 矛盾候補または回答理解に重要な具体性不足があれば needsDeepDive を true にし、最優先で確認すべき論点を recommendedFocus に記載する。
+1. 回答を要約・一般化・抽象化せず、回答原文に含まれる抽象的な表現や具体性不足を検知する。
+2. 検知結果を abstractionLevel の low / medium / high で示す。抽象的な表現が少なく具体的であるほど low とする。
+3. 「頑張った」「改善した」「貢献した」など、行動や成果の実体が分からない表現、および主体、状況、課題、本人の行動、判断理由、担当範囲、成果、数値、期間が不足している箇所を abstractHints に原文と対応づけて記載する。ただし、数値がないことだけで抽象的と断定しない。
+4. プロフィール、面接条件、過去の発言、直前の回答を比較し、不一致の可能性を contradictionCandidates に記載する。推測で矛盾を作らず、矛盾を事実として断定しない。
+5. 矛盾候補または回答理解に重要な具体性不足があれば needsDeepDive を true にし、最優先で確認すべき論点を recommendedFocus に記載する。
 
 次質問の要件:
 - needsDeepDive が true の場合は type を deep_dive とし、recommendedFocus、contradictionCandidates、abstractHints のうち最も重要な1点を直接確認する質問にする。
