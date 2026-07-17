@@ -82,7 +82,12 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     if (!currentQuestion || (body.questionId && body.questionId !== currentQuestion.id)) throw new ApiError(409, "INVALID_STATE", "表示中の質問に回答してください");
     if (found.session.answers.length >= configuredQuestionCount(found.session)) throw new ApiError(409, "QUESTION_LIMIT_REACHED", "設定した質問数に到達しています");
     if (found.session.answers.some(answer => answer.questionId === currentQuestion.id)) throw new ApiError(409, "ALREADY_ANSWERED", "この質問には回答済みです");
-    const analysis = await aiService.analyze(await store.getProfile(ctx.user.id), found.session, text);
+    const willReachLimit = found.session.answers.length + 1 >= configuredQuestionCount(found.session);
+    const profile = await store.getProfile(ctx.user.id);
+    const turn = !willReachLimit && aiService.analyzeAndNext
+      ? await aiService.analyzeAndNext(profile, found.session, text)
+      : { analysis: await aiService.analyze(profile, found.session, text), nextQuestion: null };
+    const { analysis, nextQuestion } = turn;
     const answer = {
       id: createId("ans"),
       questionId: currentQuestion.id,
@@ -94,12 +99,19 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     };
     found.session.answers.push(answer);
     appendUtterance(found.session, "user", text, "answer");
-    found.session.status = sessionStatuses.ANSWER_ANALYZING;
+    if (nextQuestion) {
+      found.session.questions.push(nextQuestion);
+      appendUtterance(found.session, "ai", nextQuestion.text, nextQuestion.type);
+      found.session.status = sessionStatuses.WAITING_ANSWER;
+    } else {
+      found.session.status = sessionStatuses.ANSWER_ANALYZING;
+    }
     found.session.updatedAt = nowIso();
     await store.saveSession(found.session);
     sendJson(res, 200, {
       answer,
       analysis,
+      nextQuestion,
       limitReached: found.session.answers.length >= configuredQuestionCount(found.session),
       sessionStatus: found.session.status
     });
@@ -109,11 +121,11 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     const found = await owned(res, params.sessionId, ctx.user.id);
     if (!found.session) return;
     if (!found.session.answers.length) throw new ApiError(409, "INVALID_STATE", "回答を送信してから次の質問へ進んでください");
-    if (reachedQuestionLimit(found.session)) {
-      return sendJson(res, 200, { question: null, limitReached: true, sessionStatus: found.session.status });
-    }
     if (found.session.questions.length > found.session.answers.length) {
       return sendJson(res, 200, { question: found.session.questions.at(-1), sessionStatus: found.session.status });
+    }
+    if (reachedQuestionLimit(found.session)) {
+      return sendJson(res, 200, { question: null, limitReached: true, sessionStatus: found.session.status });
     }
     if (found.session.status !== sessionStatuses.ANSWER_ANALYZING) throw new ApiError(409, "INVALID_STATE", "現在は次の質問を生成できません");
     const store = await getDataStore();

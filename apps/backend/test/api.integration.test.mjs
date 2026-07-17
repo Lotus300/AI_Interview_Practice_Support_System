@@ -41,6 +41,7 @@ test("ログインからフィードバック取得まで完走できる", () =>
   const { question } = await request(`/interview-sessions/${session.id}/initial-question`, { method: "POST", body: "{}" });
   const answer = await request(`/interview-sessions/${session.id}/answers`, { method: "POST", body: JSON.stringify({ questionId: question.id, answerText: "集計を自動化し、月6時間の作業を削減しました。" }) });
   assert.equal(answer.analysis.needsDeepDive, true);
+  assert.equal(answer.nextQuestion.type, "deep_dive");
   const next = await request(`/interview-sessions/${session.id}/next-question`, { method: "POST", body: "{}" });
   assert.equal(next.question.type, "deep_dive");
   await request(`/interview-sessions/${session.id}/finish`, { method: "POST", body: "{}" });

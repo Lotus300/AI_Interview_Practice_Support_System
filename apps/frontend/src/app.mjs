@@ -109,7 +109,9 @@ async function submitAnswer() {
     state.screen = "finish";
     notify("設定した質問数に到達しました。面接を終了して分析できます。", "success");
   } else {
-    const next = await interviewApi.nextQuestion(state.session.id);
+    const next = result.nextQuestion
+      ? { question: result.nextQuestion, sessionStatus: "waiting_answer" }
+      : await interviewApi.nextQuestion(state.session.id);
     if (next.limitReached || !next.question) {
       state.screen = "finish";
       notify("設定した質問数に到達しました。面接を終了して分析できます。", "success");

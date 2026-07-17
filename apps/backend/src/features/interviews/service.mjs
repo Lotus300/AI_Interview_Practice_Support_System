@@ -94,6 +94,14 @@ const analysisSchema = {
   },
   required: ["abstractionLevel", "abstractHints", "contradictionCandidates", "needsDeepDive", "recommendedFocus"]
 };
+const answerTurnSchema = {
+  type: "OBJECT",
+  properties: {
+    analysis: analysisSchema,
+    nextQuestion: textSchema
+  },
+  required: ["analysis", "nextQuestion"]
+};
 
 function context(profile, session) {
   return JSON.stringify({ profile, condition: session.condition, conversation: session.utterances?.map(item => ({ role: item.role, text: item.text })) || [] });
@@ -117,6 +125,37 @@ export function createInterviewAiService({ vertex = createVertexClient() } = {})
         prompt: `直前の質問と回答を分析してください。数値の有無だけで機械的に断定せず、具体性と整合性を評価してください。\n回答: ${JSON.stringify(answerText)}\n${context(profile, session)}`
       });
     },
+    async analyzeAndNext(profile, session, answerText) {
+      const result = await vertex.generateJson({
+        systemInstruction,
+        responseSchema: answerTurnSchema,
+        prompt: `直前の質問と回答を次の順序で分析し、その分析に基づく第${session.questions.length + 1}問を1つ作成してください。
+
+分析要件:
+1. 回答を要約・一般化・抽象化せず、回答原文に含まれる抽象的な表現や具体性不足を検知する。
+2. 検知結果を abstractionLevel の low / medium / high で示す。抽象的な表現が少なく具体的であるほど low とする。
+3. 「頑張った」「改善した」「貢献した」など、行動や成果の実体が分からない表現、および主体、状況、課題、本人の行動、判断理由、担当範囲、成果、数値、期間が不足している箇所を abstractHints に原文と対応づけて記載する。ただし、数値がないことだけで抽象的と断定しない。
+4. プロフィール、面接条件、過去の発言、直前の回答を比較し、不一致の可能性を contradictionCandidates に記載する。推測で矛盾を作らず、矛盾を事実として断定しない。
+5. 矛盾候補または回答理解に重要な具体性不足があれば needsDeepDive を true にし、最優先で確認すべき論点を recommendedFocus に記載する。
+
+次質問の要件:
+- needsDeepDive が true の場合は type を deep_dive とし、recommendedFocus、contradictionCandidates、abstractHints のうち最も重要な1点を直接確認する質問にする。
+- 矛盾候補を扱う場合は、回答者を否定せず「認識が合っているか」を確認できる表現にする。
+- needsDeepDive が false の場合は type を normal とし、面接条件に沿って会話を前進させる。
+- 1回に尋ねる論点は1つに絞り、過去の質問と同じ文面・同じ論点を繰り返さない。
+- analysis と無関係な深掘り質問を作らない。
+
+回答: ${JSON.stringify(answerText)}
+入力コンテキスト: ${context(profile, session)}`
+      });
+      const nextQuestion = ensureDistinctQuestion({
+        id: createId("q"),
+        type: result.analysis.needsDeepDive ? "deep_dive" : (result.nextQuestion.type || "normal"),
+        text: result.nextQuestion.text,
+        createdAt: nowIso()
+      }, session);
+      return { analysis: result.analysis, nextQuestion };
+    },
     async nextQuestion(profile, session) {
       const result = await vertex.generateJson({
         systemInstruction,
@@ -132,6 +171,10 @@ export function createDeterministicInterviewAiService() {
   return {
     initialQuestion: async (profile, session) => createInitialQuestion(profile, session),
     analyze: async (profile, session, answerText) => analyzeAnswer(profile, session, answerText),
+    analyzeAndNext: async (profile, session, answerText) => {
+      const analysis = analyzeAnswer(profile, session, answerText);
+      return { analysis, nextQuestion: createNextQuestion(analysis, session) };
+    },
     nextQuestion: async (_profile, session) => createNextQuestion(session.answers.at(-1)?.analysis, session)
   };
 }
