@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { defaultVoiceSettings, feedbackStatuses, sessionStatuses } from "../../../packages/shared/src/constants.mjs";
 import { config } from "./config.mjs";
 import { createFirestoreDataStore, MemoryDataStore } from "./data-store.mjs";
+import { historyExpiresAt } from "./features/interviews/retention.mjs";
 
 const memoryStore = new MemoryDataStore();
 let storePromise;
@@ -101,7 +102,8 @@ export async function seedInterviewSession(userId, condition) {
   const session = {
     id: createId("ses"), userId, status: sessionStatuses.CREATED, condition,
     questions: [], answers: [], utterances: [], feedbackStatus: feedbackStatuses.NOT_STARTED,
-    createdAt: timestamp, updatedAt: timestamp, finishedAt: null, deletedAt: null
+    createdAt: timestamp, updatedAt: timestamp, finishedAt: null, deletedAt: null,
+    expiresAt: historyExpiresAt(timestamp)
   };
   return (await getDataStore()).saveSession(session);
 }

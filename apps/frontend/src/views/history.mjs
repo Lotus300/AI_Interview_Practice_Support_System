@@ -7,7 +7,7 @@ export function sessionRow(session) {
 }
 
 export function renderHistory() {
-  return layout(`<section class="card"><div class="card-title-row"><div><p class="eyebrow">PAST INTERVIEWS</p><h2>${state.sessions.length}件の練習</h2></div><button class="primary" data-screen="condition">新しい練習</button></div>${state.sessions.length ? `<div class="history-list">${state.sessions.map(sessionRow).join("")}</div>` : '<div class="empty"><span>◷</span><h2>まだ練習履歴がありません</h2><p>最初の面接練習を始めると、ここから振り返れます。</p><button class="primary" data-screen="condition">面接練習を始める</button></div>'}</section>`, { eyebrow: "HISTORY", title: "練習履歴" });
+  return layout(`<section class="card caution"><h2>履歴の保存期間について</h2><p>練習履歴は作成日から1か月間（30日間）保存され、保存期間を過ぎると自動的に削除されます。</p></section><section class="card"><div class="card-title-row"><div><p class="eyebrow">PAST INTERVIEWS</p><h2>${state.sessions.length}件の練習</h2></div><button class="primary" data-screen="condition">新しい練習</button></div>${state.sessions.length ? `<div class="history-list">${state.sessions.map(sessionRow).join("")}</div>` : '<div class="empty"><span>◷</span><h2>まだ練習履歴がありません</h2><p>最初の面接練習を始めると、ここから振り返れます。</p><button class="primary" data-screen="condition">面接練習を始める</button></div>'}</section>`, { eyebrow: "HISTORY", title: "練習履歴" });
 }
 
 export function renderHistoryDetail() {

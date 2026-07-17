@@ -23,7 +23,9 @@ function reachedQuestionLimit(session) {
 
 export function registerInterviewRoutes(router, { aiService = createInterviewAiService(), voiceService } = {}) {
   router.add("GET", "/api/v1/interview-sessions", async (_req, res, ctx) => {
-    const sessions = await (await getDataStore()).listSessions(ctx.user.id);
+    const store = await getDataStore();
+    await store.purgeExpiredSessions(ctx.user.id);
+    const sessions = await store.listSessions(ctx.user.id);
     sendJson(res, 200, { sessions });
   });
 
