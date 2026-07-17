@@ -1,4 +1,5 @@
 import { defaultVoiceSettings, sessionStatuses } from "../../../packages/shared/src/constants.mjs";
+import { isHistoryExpired } from "./features/interviews/retention.mjs";
 
 function clone(value) {
   return value == null ? value : structuredClone(value);
@@ -41,8 +42,18 @@ export class MemoryDataStore {
   async getSession(id) { return clone(this.collections.sessions.get(id) ?? null); }
   async listSessions(userId) {
     return [...this.collections.sessions.values()]
-      .filter(item => item.userId === userId && item.status === sessionStatuses.FINISHED && !item.deletedAt)
+      .filter(item => item.userId === userId && item.status === sessionStatuses.FINISHED && !item.deletedAt && !isHistoryExpired(item))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(clone);
+  }
+  async purgeExpiredSessions(userId) {
+    const expiredIds = [...this.collections.sessions.values()].filter(item => item.userId === userId && isHistoryExpired(item)).map(item => item.id);
+    for (const id of expiredIds) await this.deleteSessionData(id);
+    return expiredIds.length;
+  }
+  async deleteSessionData(sessionId) {
+    this.collections.sessions.delete(sessionId);
+    this.collections.feedbacks.delete(sessionId);
+    for (const [jobId, job] of this.collections.jobs) if (job.sessionId === sessionId) this.collections.jobs.delete(jobId);
   }
   async saveSession(session) { this.collections.sessions.set(session.id, clone(session)); return clone(session); }
   async getJob(id) { return clone(this.collections.jobs.get(id) ?? null); }
@@ -146,8 +157,23 @@ export async function createFirestoreDataStore({ projectId, databaseId = "(defau
     async listSessions(userId) {
       const result = await firestore.collection("interviewSessions").where("userId", "==", userId).get();
       return Promise.all(result.docs.map(item => fromFirestore(item.data()))).then(items => items
-        .filter(item => item.status === sessionStatuses.FINISHED && !item.deletedAt)
+        .filter(item => item.status === sessionStatuses.FINISHED && !item.deletedAt && !isHistoryExpired(item))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    },
+    async deleteSessionData(sessionId) {
+      await firestore.recursiveDelete(firestore.collection("interviewSessions").doc(sessionId));
+      await firestore.collection("feedbacks").doc(sessionId).delete();
+      const jobs = await firestore.collection("jobs").where("sessionId", "==", sessionId).get();
+      const batch = firestore.batch();
+      for (const job of jobs.docs) batch.delete(job.ref);
+      batch.delete(firestore.collection("feedbackJobLocks").doc(sessionId));
+      await batch.commit();
+    },
+    async purgeExpiredSessions(userId) {
+      const result = await firestore.collection("interviewSessions").where("userId", "==", userId).get();
+      const expiredIds = result.docs.map(item => fromFirestore(item.data())).filter(item => isHistoryExpired(item)).map(item => item.id);
+      for (const sessionId of expiredIds) await this.deleteSessionData(sessionId);
+      return expiredIds.length;
     },
     async saveSession(session) {
       const ref = firestore.collection("interviewSessions").doc(session.id);
