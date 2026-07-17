@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createVoiceCache } from "../src/features/media/voice-cache.mjs";
 import { createVoiceService, speakerIds } from "../src/features/media/voice-service.mjs";
+import { resetDb } from "../src/store.mjs";
 
 function wavFixture(durationMs = 1000) {
   const byteRate = 48000;
@@ -121,4 +122,33 @@ test("同じ通常質問の読み直しではVOICEVOX生成結果を再利用す
   await service.synthesize({ ...input, userId: "user-1" });
 
   assert.equal(synthesisCount, 1);
+});
+
+test("話者ごとの標準試聴音声を永続化して別サービスインスタンスから再利用する", async () => {
+  resetDb();
+  let synthesisCount = 0;
+  const firstClient = {
+    configured: true,
+    async createAudioQuery() { return {}; },
+    async synthesize() { synthesisCount += 1; return wavFixture(1000); }
+  };
+  const input = {
+    userId: "user-1",
+    text: "永続試聴キャッシュ専用テキスト",
+    speaker: "No.7",
+    speedScale: 1.8,
+    volumeScale: 1.6,
+    preview: true
+  };
+
+  await createVoiceService({ client: firstClient, logger: { error() {}, warn() {} } }).synthesize(input);
+  const secondClient = {
+    configured: true,
+    async createAudioQuery() { throw new Error("VOICEVOX should not be called"); },
+    async synthesize() { throw new Error("VOICEVOX should not be called"); }
+  };
+  const reused = await createVoiceService({ client: secondClient, logger: { error() {}, warn() {} } }).synthesize(input);
+
+  assert.equal(synthesisCount, 1);
+  assert.equal(reused.aiResponseStatus, "voice_ready");
 });
