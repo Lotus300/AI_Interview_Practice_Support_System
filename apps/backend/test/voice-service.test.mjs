@@ -41,6 +41,8 @@ test("話者・速度・音量をVOICEVOXへ渡し、本人だけ再生できる
   assert.equal(calls[0][1].speakerId, speakerIds["No.7"]);
   assert.equal(calls[1][1].audioQuery.speedScale, 1.4);
   assert.equal(calls[1][1].audioQuery.volumeScale, 0.8);
+  assert.equal(calls[1][1].audioQuery.outputSamplingRate, 16000);
+  assert.equal(calls[1][1].audioQuery.outputStereo, false);
   assert.equal(result.aiResponseStatus, "voice_ready");
   assert.equal(result.voice.durationMs, 1500);
   assert.equal(service.findPlayback(result.voice.id, "user-1").audio, audio);

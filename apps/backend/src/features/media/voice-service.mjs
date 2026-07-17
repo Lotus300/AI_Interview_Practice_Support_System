@@ -30,6 +30,14 @@ export function createVoiceService({
   createErrorId = () => crypto.randomUUID()
 } = {}) {
   return {
+    async warmup() {
+      if (!client.configured || !client.warmup) return;
+      try {
+        await client.warmup();
+      } catch (error) {
+        logger.warn?.("VOICEVOX warmup failed", { name: error.name, message: error.message });
+      }
+    },
     async synthesize({ userId, text, speaker, speedScale, volumeScale, preview = false }) {
       if (!client.configured) {
         return { aiResponseStatus: "text_only", text, voice: null, reason: "VOICEVOX_NOT_CONFIGURED", provider: "unavailable" };
@@ -41,6 +49,8 @@ export function createVoiceService({
           const audioQuery = await client.createAudioQuery({ text, speakerId });
           audioQuery.speedScale = preview ? 1 : speedScale;
           audioQuery.volumeScale = preview ? 1 : volumeScale;
+          audioQuery.outputSamplingRate = config.voicevox.outputSamplingRate;
+          audioQuery.outputStereo = false;
           errorStage = "synthesis";
           return client.synthesize({ audioQuery, speakerId });
         };

@@ -11,7 +11,7 @@ export function createVoicevoxClient({ baseUrl, authMode = "none", timeoutMs = 6
   const endpoint = String(baseUrl || "").replace(/\/+$/, "");
   let identityClientPromise;
 
-  async function request(path, { body, binary = false } = {}) {
+  async function request(path, { method = "POST", body, binary = false } = {}) {
     if (!endpoint) throw new Error("VOICEVOX_BASE_URL is not configured");
     const url = `${endpoint}${path}`;
     if (authMode === "google") {
@@ -19,7 +19,7 @@ export function createVoicevoxClient({ baseUrl, authMode = "none", timeoutMs = 6
       const client = await identityClientPromise;
       const response = await client.request({
         url,
-        method: "POST",
+        method,
         data: body,
         headers: body ? { "content-type": "application/json" } : undefined,
         responseType: binary ? "arraybuffer" : "json",
@@ -29,7 +29,7 @@ export function createVoicevoxClient({ baseUrl, authMode = "none", timeoutMs = 6
     }
 
     const response = await fetchImpl(url, {
-      method: "POST",
+      method,
       headers: body ? { "content-type": "application/json" } : undefined,
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(timeoutMs)
@@ -40,6 +40,9 @@ export function createVoicevoxClient({ baseUrl, authMode = "none", timeoutMs = 6
 
   return {
     configured: Boolean(endpoint),
+    warmup() {
+      return request("/version", { method: "GET" });
+    },
     createAudioQuery({ text, speakerId }) {
       return request(`/audio_query?${new URLSearchParams({ text, speaker: String(speakerId) })}`);
     },
