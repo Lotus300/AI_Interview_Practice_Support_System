@@ -39,6 +39,7 @@ export const config = {
     authMode: process.env.VOICEVOX_AUTH_MODE || "none",
     defaultSpeakerId: Number(process.env.VOICEVOX_DEFAULT_SPEAKER_ID || 13),
     timeoutMs: Number(process.env.VOICEVOX_TIMEOUT_MS || 60000),
+    outputSamplingRate: Number(process.env.VOICEVOX_OUTPUT_SAMPLING_RATE || 16000),
     cacheTtlMs: Number(process.env.VOICEVOX_CACHE_TTL_MS || 120000),
     maxCacheEntries: Number(process.env.VOICEVOX_MAX_CACHE_ENTRIES || 20),
     previewCacheTtlMs: Number(process.env.VOICEVOX_PREVIEW_CACHE_TTL_MS || 3600000),

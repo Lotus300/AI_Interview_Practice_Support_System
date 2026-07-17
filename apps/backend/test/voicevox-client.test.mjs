@@ -39,3 +39,19 @@ test("Google認証モードではCloud Run向けIDトークンクライアント
   assert.equal(calls[0].audience, "https://voicevox.example");
   assert.match(calls[1].url, /\/audio_query\?/);
 });
+
+test("warmupは軽量なversion APIをGETする", async () => {
+  const requests = [];
+  const client = createVoicevoxClient({
+    baseUrl: "https://voicevox.example",
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return new Response(JSON.stringify("0.25.1"), { status: 200, headers: { "content-type": "application/json" } });
+    }
+  });
+
+  await client.warmup();
+
+  assert.equal(requests[0].url, "https://voicevox.example/version");
+  assert.equal(requests[0].options.method, "GET");
+});

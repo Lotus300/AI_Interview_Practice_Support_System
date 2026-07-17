@@ -21,7 +21,7 @@ function reachedQuestionLimit(session) {
   return limit > 0 && (session.questions.length >= limit || session.answers.length >= limit);
 }
 
-export function registerInterviewRoutes(router, { aiService = createInterviewAiService() } = {}) {
+export function registerInterviewRoutes(router, { aiService = createInterviewAiService(), voiceService } = {}) {
   router.add("GET", "/api/v1/interview-sessions", async (_req, res, ctx) => {
     const sessions = await (await getDataStore()).listSessions(ctx.user.id);
     sendJson(res, 200, { sessions });
@@ -61,6 +61,7 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     if (found.session.questions.length) {
       return sendJson(res, 200, { question: found.session.questions.at(-1), sessionStatus: found.session.status });
     }
+    void voiceService?.warmup?.();
     const store = await getDataStore();
     const question = await aiService.initialQuestion(await store.getProfile(ctx.user.id), found.session);
     found.session.questions.push(question);
@@ -84,6 +85,7 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     if (found.session.answers.some(answer => answer.questionId === currentQuestion.id)) throw new ApiError(409, "ALREADY_ANSWERED", "この質問には回答済みです");
     const willReachLimit = found.session.answers.length + 1 >= configuredQuestionCount(found.session);
     const profile = await store.getProfile(ctx.user.id);
+    void voiceService?.warmup?.();
     const turn = !willReachLimit && aiService.analyzeAndNext
       ? await aiService.analyzeAndNext(profile, found.session, text)
       : { analysis: await aiService.analyze(profile, found.session, text), nextQuestion: null };

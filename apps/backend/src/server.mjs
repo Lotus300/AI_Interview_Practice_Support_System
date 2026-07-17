@@ -10,6 +10,7 @@ import { registerProfileRoutes } from "./features/profile/routes.mjs";
 import { registerSettingsRoutes } from "./features/settings/routes.mjs";
 import { registerInterviewRoutes } from "./features/interviews/routes.mjs";
 import { registerMediaRoutes } from "./features/media/routes.mjs";
+import { createVoiceService } from "./features/media/voice-service.mjs";
 import { registerFeedbackRoutes } from "./features/feedback/routes.mjs";
 import { createStaticFileHandler } from "./core/static-files.mjs";
 
@@ -17,14 +18,15 @@ const serveStatic = createStaticFileHandler();
 
 export function buildRouter({ voiceService, speechService, aiService, feedbackDispatcher, taskAuthorizer, runFeedbackJob } = {}) {
   const router = createRouter();
+  const sharedVoiceService = voiceService ?? createVoiceService();
   router.add("GET", "/api/v1/health", async (_req, res) => {
     sendJson(res, 200, { status: "ok", service: "interview-backend-api", time: nowIso() });
   }, { auth: false });
   registerAuthRoutes(router);
   registerProfileRoutes(router);
   registerSettingsRoutes(router);
-  registerInterviewRoutes(router, { aiService });
-  registerMediaRoutes(router, { voiceService, speechService });
+  registerInterviewRoutes(router, { aiService, voiceService: sharedVoiceService });
+  registerMediaRoutes(router, { voiceService: sharedVoiceService, speechService });
   registerFeedbackRoutes(router, { dispatcher: feedbackDispatcher, taskAuthorizer, runJob: runFeedbackJob });
   return router;
 }
