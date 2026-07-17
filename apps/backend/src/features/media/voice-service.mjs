@@ -44,9 +44,10 @@ export function createVoiceService({
           errorStage = "synthesis";
           return client.synthesize({ audioQuery, speakerId });
         };
-        const audio = preview
-          ? await previewCache.getOrCreate(`${speakerId}:${text}`, createAudio)
-          : await createAudio();
+        // Reuse identical synthesis results for normal playback as well as previews.
+        // This avoids repeating both VOICEVOX HTTP calls when a question is replayed.
+        const synthesisKey = `${speakerId}:${preview ? 1 : speedScale}:${preview ? 1 : volumeScale}:${text}`;
+        const audio = await previewCache.getOrCreate(synthesisKey, createAudio);
         const id = cache.put({ userId, audio });
         return {
           aiResponseStatus: "voice_ready",
