@@ -1,6 +1,6 @@
 import { api, interviewApi, resolveApiResource } from "./core/api.mjs";
 import { clearInterviewState, notify, state } from "./core/state.mjs";
-import { hasClickCommand } from "./core/events.mjs";
+import { createCommandGate, hasClickCommand } from "./core/events.mjs";
 import { disposeRecording, startRecording, stopRecording } from "./features/recording.mjs";
 import { previewTextForControl, readVoiceSettings, voicePreviewTexts } from "./features/voice-preview.mjs";
 import { configurePreviewPlayback, createAudioForPlayback, prepareAutoplayPlayback } from "./features/voice-playback.mjs";
@@ -309,6 +309,7 @@ const actionHandlers = {
   "load-more-history": loadMoreHistory,
   "delete-session": deleteSession
 };
+const runCommandOnce = createCommandGate();
 
 document.addEventListener("input", event => {
   if (event.target.id === "answerDraft") {
@@ -348,21 +349,25 @@ document.addEventListener("click", async event => {
   const target = event.target.closest("button, [data-action]");
   if (!target) return;
   if (!hasClickCommand(target, actionHandlers)) return;
-  try {
-    if (target.dataset.screen) await navigate(target.dataset.screen);
-    const handler = actionHandlers[target.dataset.action];
-    if (handler) await handler(target);
-  } catch (error) {
-    state.busy = false;
-    notify(error.message, "error");
-  }
-  render();
+  const commandKey = target.dataset.action ? `action:${target.dataset.action}` : `screen:${target.dataset.screen}`;
+  await runCommandOnce(commandKey, async () => {
+    try {
+      if (target.dataset.screen) await navigate(target.dataset.screen);
+      const handler = actionHandlers[target.dataset.action];
+      if (handler) await handler(target);
+    } catch (error) {
+      state.busy = false;
+      notify(error.message, "error");
+    }
+    render();
+  });
 });
 
 document.addEventListener("submit", async event => {
   event.preventDefault();
-  if (state.busy) return;
   const form = event.target;
+  await runCommandOnce(`form:${form.dataset.form || "unknown"}`, async () => {
+  if (state.busy) return;
   const values = Object.fromEntries(new FormData(form).entries());
   const preparedQuestionPlayback = form.dataset.form === "condition" ? prepareAutoplayPlayback() : null;
   state.busy = true;
@@ -404,6 +409,7 @@ document.addEventListener("submit", async event => {
     state.busy = false;
     render();
   }
+  });
 });
 
 await refreshMe();
