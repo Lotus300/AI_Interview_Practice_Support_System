@@ -4,6 +4,7 @@ import { createCommandGate, hasClickCommand } from "../../frontend/src/core/even
 import { state } from "../../frontend/src/core/state.mjs";
 import { renderHome, renderProfile } from "../../frontend/src/views/account.mjs";
 import { renderSettings } from "../../frontend/src/views/settings.mjs";
+import { confirmAccountDeletion } from "../../frontend/src/features/account-deletion.mjs";
 
 test("通常のsubmitボタンをグローバルclick処理で再描画しない", () => {
   const handlers = { login: () => {} };
@@ -86,5 +87,15 @@ test("設定画面に取り消せないアカウント削除を明示する", ()
   const html = renderSettings();
   assert.match(html, /プロフィール、音声設定、面接履歴、フィードバックを完全に削除/);
   assert.match(html, /この操作は取り消せません/);
+  assert.match(html, /「削除」の文字入力による最終確認/);
   assert.match(html, /data-action="delete-account"/);
+});
+
+test("アカウント削除は警告確認と文字入力の二重確認を要求する", () => {
+  let promptCalls = 0;
+  assert.equal(confirmAccountDeletion({ confirmFn: () => false, promptFn: () => { promptCalls += 1; return "削除"; } }), false);
+  assert.equal(promptCalls, 0);
+  assert.equal(confirmAccountDeletion({ confirmFn: () => true, promptFn: () => "削除する" }), false);
+  assert.equal(confirmAccountDeletion({ confirmFn: () => true, promptFn: () => null }), false);
+  assert.equal(confirmAccountDeletion({ confirmFn: () => true, promptFn: () => "削除" }), true);
 });

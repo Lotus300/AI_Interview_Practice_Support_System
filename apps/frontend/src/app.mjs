@@ -5,6 +5,7 @@ import { disposeRecording, startRecording, stopRecording } from "./features/reco
 import { previewTextForControl, readVoiceSettings, voicePreviewTexts } from "./features/voice-preview.mjs";
 import { configurePreviewPlayback, createAudioForPlayback, prepareAutoplayPlayback } from "./features/voice-playback.mjs";
 import { createQuestionVoicePreloader, readQuestionAutomatically, shouldPrepareNextQuestion } from "./features/question-audio.mjs";
+import { confirmAccountDeletion } from "./features/account-deletion.mjs";
 import { render } from "./views/index.mjs";
 
 async function refreshMe() {
@@ -81,7 +82,7 @@ async function handleLogout() {
 }
 
 async function deleteAccount() {
-  if (!confirm("アカウントとすべての面接データを完全に削除します。この操作は取り消せません。削除しますか？")) return;
+  if (!confirmAccountDeletion()) return;
   disposeRecording();
   await api("/account", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE_MY_ACCOUNT" }) });
   clearInterviewState();
