@@ -21,7 +21,7 @@ export async function api(path, options = {}) {
 }
 
 export const interviewApi = {
-  list: () => api("/interview-sessions"),
+  list: (cursor = null) => api(`/interview-sessions${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
   get: (id) => api(`/interview-sessions/${id}`),
   create: (input) => api("/interview-sessions", { method: "POST", body: JSON.stringify(input) }),
   remove: (id) => api(`/interview-sessions/${id}`, { method: "DELETE" }),

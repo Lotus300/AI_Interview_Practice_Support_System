@@ -1,8 +1,29 @@
 import { defaultVoiceSettings, sessionStatuses } from "../../../packages/shared/src/constants.mjs";
-import { isHistoryExpired } from "./features/interviews/retention.mjs";
+import { HISTORY_PAGE_SIZE, historyCutoff, isHistoryExpired } from "./features/interviews/retention.mjs";
 
 function clone(value) {
   return value == null ? value : structuredClone(value);
+}
+
+function encodeCursor(item) {
+  return Buffer.from(JSON.stringify({ createdAt: item.createdAt, id: item.id })).toString("base64url");
+}
+
+export function decodeHistoryCursor(cursor) {
+  if (!cursor) return null;
+  try {
+    const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (!value.id || Number.isNaN(Date.parse(value.createdAt))) return null;
+    return { id: String(value.id), createdAt: new Date(value.createdAt).toISOString() };
+  } catch {
+    return null;
+  }
+}
+
+function pageFromItems(items, limit) {
+  const hasMore = items.length > limit;
+  const sessions = items.slice(0, limit).map(clone);
+  return { sessions, nextCursor: hasMore ? encodeCursor(sessions.at(-1)) : null };
 }
 
 export class MemoryDataStore {
@@ -44,6 +65,15 @@ export class MemoryDataStore {
     return [...this.collections.sessions.values()]
       .filter(item => item.userId === userId && item.status === sessionStatuses.FINISHED && !item.deletedAt && !isHistoryExpired(item))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(clone);
+  }
+  async listSessionPage(userId, { limit = HISTORY_PAGE_SIZE, cursor = null } = {}) {
+    const decoded = decodeHistoryCursor(cursor);
+    const items = [...this.collections.sessions.values()]
+      .filter(item => item.userId === userId && item.status === sessionStatuses.FINISHED && !item.deletedAt && !isHistoryExpired(item))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+      .filter(item => !decoded || item.createdAt < decoded.createdAt || (item.createdAt === decoded.createdAt && item.id < decoded.id))
+      .slice(0, limit + 1);
+    return pageFromItems(items, limit);
   }
   async purgeExpiredSessions(userId) {
     const expiredIds = [...this.collections.sessions.values()].filter(item => item.userId === userId && isHistoryExpired(item)).map(item => item.id);
@@ -159,6 +189,19 @@ export async function createFirestoreDataStore({ projectId, databaseId = "(defau
       return Promise.all(result.docs.map(item => fromFirestore(item.data()))).then(items => items
         .filter(item => item.status === sessionStatuses.FINISHED && !item.deletedAt && !isHistoryExpired(item))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    },
+    async listSessionPage(userId, { limit = HISTORY_PAGE_SIZE, cursor = null } = {}) {
+      const decoded = decodeHistoryCursor(cursor);
+      let query = firestore.collection("interviewSessions")
+        .where("userId", "==", userId)
+        .where("status", "==", sessionStatuses.FINISHED)
+        .where("deletedAt", "==", null)
+        .where("createdAt", ">=", Timestamp.fromDate(new Date(historyCutoff())))
+        .orderBy("createdAt", "desc")
+        .orderBy("__name__", "desc");
+      if (decoded) query = query.startAfter(Timestamp.fromDate(new Date(decoded.createdAt)), decoded.id);
+      const result = await query.limit(limit + 1).get();
+      return pageFromItems(result.docs.map(item => fromFirestore(item.data())), limit);
     },
     async deleteSessionData(sessionId) {
       await firestore.recursiveDelete(firestore.collection("interviewSessions").doc(sessionId));
