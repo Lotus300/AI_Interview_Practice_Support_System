@@ -80,6 +80,15 @@ async function handleLogout() {
   Object.assign(state, { user: null, profile: null, settings: null, voiceSettingsDraft: null, sessions: [], historyNextCursor: null, screen: "login", drawerOpen: false });
 }
 
+async function deleteAccount() {
+  if (!confirm("アカウントとすべての面接データを完全に削除します。この操作は取り消せません。削除しますか？")) return;
+  disposeRecording();
+  await api("/account", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE_MY_ACCOUNT" }) });
+  clearInterviewState();
+  Object.assign(state, { user: null, profile: null, settings: null, voiceSettingsDraft: null, sessions: [], historyNextCursor: null, screen: "login", drawerOpen: false });
+  notify("アカウントと関連データを削除しました。", "success");
+}
+
 let activeVoicePlayback = null;
 let latestPreviewRequest = 0;
 let preparedVoicePreview = null;
@@ -292,6 +301,7 @@ const actionHandlers = {
   "clear-message": async () => { state.message = ""; },
   login: handleLogin,
   logout: handleLogout,
+  "delete-account": deleteAccount,
   voice: () => synthesizeVoice(state.question?.text),
   "preview-voice": (target) => synthesizeVoice(voicePreviewTexts.speaker, readVoiceSettings(target.form, state.voiceSettingsDraft || state.settings), { preview: true }),
   "start-recording": () => startRecording(render),

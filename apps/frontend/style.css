@@ -233,3 +233,7 @@ button.text-button { padding: 5px; border: 0; color: var(--blue); background: tr
   .feature-row { gap: 10px 14px; margin-top: 22px; }
   .login-card { padding: 30px 22px; }
 }
+.danger-zone { display: flex; align-items: center; justify-content: space-between; gap: 24px; border-color: #fecaca; margin-top: 24px; }
+.danger-zone h2 { color: #991b1b; margin-bottom: 8px; }
+.danger-zone p { margin: 0; color: #64748b; }
+@media (max-width: 640px) { .danger-zone { align-items: stretch; flex-direction: column; } }

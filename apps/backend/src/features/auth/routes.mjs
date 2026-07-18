@@ -1,8 +1,8 @@
 import { URL } from "node:url";
 import { config, isGoogleOAuthConfigured } from "../../config.mjs";
 import { buildGoogleAuthUrl, createOAuthNonce, createOAuthState, exchangeGoogleCode, verifyGoogleIdToken } from "../../oauth.mjs";
-import { clearOAuthStateCookie, clearSessionCookie, parseCookies, sendJson, sendNoContent, setOAuthStateCookie, setSessionCookie } from "../../http.mjs";
-import { consumeOAuthState, createSessionForUser, ensureDemoUser, findOrCreateGoogleUser, revokeSession, saveOAuthState } from "../../store.mjs";
+import { clearOAuthStateCookie, clearSessionCookie, parseCookies, readJson, sendJson, sendNoContent, setOAuthStateCookie, setSessionCookie } from "../../http.mjs";
+import { consumeOAuthState, createSessionForUser, deleteUserAccount, ensureDemoUser, findOrCreateGoogleUser, revokeSession, saveOAuthState } from "../../store.mjs";
 import { publicUser } from "../../core/resources.mjs";
 
 function redirect(res, location, setCookie) {
@@ -57,6 +57,15 @@ export function registerAuthRoutes(router) {
   router.add("POST", "/api/v1/auth/logout", async (req, res) => {
     const cookies = parseCookies(req.headers.cookie);
     await revokeSession(cookies[config.sessionCookieName]);
+    sendNoContent(res, { "set-cookie": clearSessionCookie() });
+  });
+
+  router.add("DELETE", "/api/v1/account", async (req, res, ctx) => {
+    const input = await readJson(req);
+    if (input.confirmation !== "DELETE_MY_ACCOUNT") {
+      return sendJson(res, 400, { code: "VALIDATION_ERROR", message: "アカウント削除の確認が必要です" });
+    }
+    await deleteUserAccount(ctx.user.id);
     sendNoContent(res, { "set-cookie": clearSessionCookie() });
   });
 }
