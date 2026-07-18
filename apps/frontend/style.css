@@ -218,3 +218,18 @@ button.text-button { padding: 5px; border: 0; color: var(--blue); background: tr
   .interview-footer { align-items: flex-start; gap: 10px; }
   .confirm-card, .loading-card { padding: 30px 20px; }
 }
+
+@media (max-width: 480px) {
+  .login-shell { min-height: auto; gap: 24px; }
+  .login-copy h1 {
+    margin: 12px 0 18px;
+    font-size: clamp(28px, 8.2vw, 32px);
+    line-height: 1.35;
+    letter-spacing: -.05em;
+    word-break: keep-all;
+    overflow-wrap: normal;
+  }
+  .login-copy > p { font-size: 14px; }
+  .feature-row { gap: 10px 14px; margin-top: 22px; }
+  .login-card { padding: 30px 22px; }
+}
