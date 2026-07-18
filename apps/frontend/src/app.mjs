@@ -8,9 +8,17 @@ import { createQuestionVoicePreloader, readQuestionAutomatically, shouldPrepareN
 import { render } from "./views/index.mjs";
 
 async function refreshMe() {
+  let user;
   try {
-    const { user } = await api("/auth/me");
-    state.user = user;
+    ({ user } = await api("/auth/me"));
+  } catch {
+    state.user = null;
+    state.screen = "login";
+    return;
+  }
+
+  state.user = user;
+  try {
     const [{ profile }, { settings }, history] = await Promise.all([
       api("/profile"), api("/settings"), interviewApi.list()
     ]);
@@ -23,9 +31,9 @@ async function refreshMe() {
       user: hasSavedProfile ? { ...user, profileCompleted: true } : user,
       screen: user.profileCompleted || hasSavedProfile ? "home" : "profile"
     });
-  } catch {
-    state.user = null;
-    state.screen = "login";
+  } catch (error) {
+    state.screen = user.profileCompleted ? "home" : "profile";
+    notify(`ログインしましたが、初期データを取得できませんでした。再読み込みしてください。(${error.message})`, "error");
   }
 }
 
