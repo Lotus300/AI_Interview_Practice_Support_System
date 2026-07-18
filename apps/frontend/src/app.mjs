@@ -5,6 +5,7 @@ import { disposeRecording, startRecording, stopRecording } from "./features/reco
 import { previewTextForControl, readVoiceSettings, voicePreviewTexts } from "./features/voice-preview.mjs";
 import { configurePreviewPlayback, createAudioForPlayback, prepareAutoplayPlayback } from "./features/voice-playback.mjs";
 import { createQuestionVoicePreloader, readQuestionAutomatically, shouldPrepareNextQuestion } from "./features/question-audio.mjs";
+import { confirmAccountDeletion } from "./features/account-deletion.mjs";
 import { render } from "./views/index.mjs";
 
 async function refreshMe() {
@@ -78,6 +79,15 @@ async function handleLogout() {
   await api("/auth/logout", { method: "POST" });
   clearInterviewState();
   Object.assign(state, { user: null, profile: null, settings: null, voiceSettingsDraft: null, sessions: [], historyNextCursor: null, screen: "login", drawerOpen: false });
+}
+
+async function deleteAccount() {
+  if (!confirmAccountDeletion()) return;
+  disposeRecording();
+  await api("/account", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE_MY_ACCOUNT" }) });
+  clearInterviewState();
+  Object.assign(state, { user: null, profile: null, settings: null, voiceSettingsDraft: null, sessions: [], historyNextCursor: null, screen: "login", drawerOpen: false });
+  notify("アカウントと関連データを削除しました。", "success");
 }
 
 let activeVoicePlayback = null;
@@ -292,6 +302,7 @@ const actionHandlers = {
   "clear-message": async () => { state.message = ""; },
   login: handleLogin,
   logout: handleLogout,
+  "delete-account": deleteAccount,
   voice: () => synthesizeVoice(state.question?.text),
   "preview-voice": (target) => synthesizeVoice(voicePreviewTexts.speaker, readVoiceSettings(target.form, state.voiceSettingsDraft || state.settings), { preview: true }),
   "start-recording": () => startRecording(render),

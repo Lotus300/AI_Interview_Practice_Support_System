@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildRouter, createServer } from "../src/server.mjs";
-import { resetDb } from "../src/store.mjs";
+import { db, resetDb } from "../src/store.mjs";
 import { createDeterministicInterviewAiService } from "../src/features/interviews/service.mjs";
 import { createFeedback, finishFeedbackJob } from "../src/features/feedback/service.mjs";
 
@@ -111,6 +111,34 @@ test("未許可Originと不正入力を拒否する", () => withServer(async bas
   });
   assert.equal(invalidChoice.status, 400);
   assert.equal((await invalidChoice.json()).code, "VALIDATION_ERROR");
+}));
+
+test("確認後にアカウントと関連データを完全削除する", () => withServer(async base => {
+  const loginResponse = await fetch(`${base}/auth/google/start`);
+  const cookie = loginResponse.headers.get("set-cookie").split(";")[0];
+  const request = (path, options = {}) => fetch(`${base}${path}`, {
+    ...options,
+    headers: { cookie, ...(options.body ? { "content-type": "application/json" } : {}) }
+  });
+
+  await request("/profile", { method: "PUT", body: JSON.stringify({ fullName: "削除 太郎", education: "テスト大学", graduationStatus: "卒業" }) });
+  const created = await request("/interview-sessions", { method: "POST", body: JSON.stringify({ jobRole: "エンジニア", industry: "IT", questionCount: 1 }) });
+  assert.ok(created.ok);
+
+  const rejected = await request("/account", { method: "DELETE", body: JSON.stringify({ confirmation: "wrong" }) });
+  assert.equal(rejected.status, 400);
+  assert.ok(db.users.has("usr_demo"));
+
+  const deleted = await request("/account", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE_MY_ACCOUNT" }) });
+  assert.equal(deleted.status, 204);
+  assert.match(deleted.headers.get("set-cookie"), /Max-Age=0/);
+  assert.equal(db.users.size, 0);
+  assert.equal(db.profiles.size, 0);
+  assert.equal(db.settings.size, 0);
+  assert.equal(db.sessions.size, 0);
+  assert.equal(db.authSessions.size, 0);
+
+  assert.equal((await request("/auth/me")).status, 401);
 }));
 
 test("設定した質問数を超えて次の質問を生成しない", () => withServer(async base => {

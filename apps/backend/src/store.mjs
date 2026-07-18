@@ -88,6 +88,10 @@ export async function revokeSession(sessionId) {
   await store.revokeAuthSession(hashSessionId(sessionId), nowIso());
 }
 
+export async function deleteUserAccount(userId) {
+  await (await getDataStore()).deleteUserData(userId);
+}
+
 export async function saveOAuthState(state, nonce) {
   const store = await getDataStore();
   await store.saveOAuthState({ state, nonce, createdAt: nowIso(), expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), usedAt: null });

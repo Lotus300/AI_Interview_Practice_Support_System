@@ -85,6 +85,18 @@ export class MemoryDataStore {
     this.collections.feedbacks.delete(sessionId);
     for (const [jobId, job] of this.collections.jobs) if (job.sessionId === sessionId) this.collections.jobs.delete(jobId);
   }
+  async deleteUserData(userId) {
+    const sessionIds = [...this.collections.sessions.values()]
+      .filter(item => item.userId === userId)
+      .map(item => item.id);
+    for (const sessionId of sessionIds) await this.deleteSessionData(sessionId);
+    for (const [jobId, job] of this.collections.jobs) if (job.userId === userId) this.collections.jobs.delete(jobId);
+    for (const [sessionId, feedback] of this.collections.feedbacks) if (feedback.userId === userId) this.collections.feedbacks.delete(sessionId);
+    for (const [hash, session] of this.collections.authSessions) if (session.userId === userId) this.collections.authSessions.delete(hash);
+    this.collections.profiles.delete(userId);
+    this.collections.settings.delete(userId);
+    this.collections.users.delete(userId);
+  }
   async saveSession(session) { this.collections.sessions.set(session.id, clone(session)); return clone(session); }
   async saveSessionDelta(session) { this.collections.sessions.set(session.id, clone(session)); return clone(session); }
   async getJob(id) { return clone(this.collections.jobs.get(id) ?? null); }
@@ -212,6 +224,23 @@ export async function createFirestoreDataStore({ projectId, databaseId = "(defau
       for (const job of jobs.docs) batch.delete(job.ref);
       batch.delete(firestore.collection("feedbackJobLocks").doc(sessionId));
       await batch.commit();
+    },
+    async deleteUserData(userId) {
+      const deleteQuery = async (collection, field = "userId") => {
+        const result = await firestore.collection(collection).where(field, "==", userId).get();
+        await Promise.all(result.docs.map(item => item.ref.delete()));
+      };
+      const sessions = await firestore.collection("interviewSessions").where("userId", "==", userId).get();
+      for (const session of sessions.docs) await firestore.recursiveDelete(session.ref);
+      await Promise.all([
+        deleteQuery("jobs"),
+        deleteQuery("feedbacks"),
+        deleteQuery("feedbackJobLocks"),
+        deleteQuery("authSessions"),
+        firestore.collection("profiles").doc(userId).delete(),
+        firestore.collection("settings").doc(userId).delete()
+      ]);
+      await firestore.collection("users").doc(userId).delete();
     },
     async purgeExpiredSessions(userId) {
       const result = await firestore.collection("interviewSessions").where("userId", "==", userId).get();
