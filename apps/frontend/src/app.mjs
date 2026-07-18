@@ -133,6 +133,9 @@ async function synthesizeVoice(text, settings = state.settings, { preview = fals
 }
 
 async function submitAnswer() {
+  if (state.busy) return;
+  state.answerSubmissionId ||= crypto.randomUUID();
+  const submissionId = state.answerSubmissionId;
   const preparedQuestionPlayback = shouldPrepareNextQuestion(state.session) ? prepareAutoplayPlayback() : null;
   let nextQuestionToRead = null;
   let preparedQuestionVoice = null;
@@ -141,10 +144,12 @@ async function submitAnswer() {
   const result = await interviewApi.submitAnswer(state.session.id, {
     questionId: state.question?.id,
     answerText: state.answerDraft,
-    inputType: state.speechStatus === "recognized" ? "speech_corrected" : "text"
+    inputType: state.speechStatus === "recognized" ? "speech_corrected" : "text",
+    clientRequestId: submissionId
   });
   state.session.answers.push(result.answer);
   state.answerDraft = "";
+  state.answerSubmissionId = null;
   state.speechStatus = "idle";
 
   if (result.limitReached || state.session.answers.length >= state.session.condition.questionCount) {
@@ -300,6 +305,7 @@ const actionHandlers = {
 document.addEventListener("input", event => {
   if (event.target.id === "answerDraft") {
     state.answerDraft = event.target.value;
+    state.answerSubmissionId = null;
     const submit = document.querySelector('[data-action="submit-answer"]');
     if (submit) submit.disabled = !state.answerDraft.trim() || state.busy;
   }
