@@ -39,9 +39,13 @@ test("ログインからフィードバック取得まで完走できる", () =>
   await request("/profile", { method: "PUT", body: JSON.stringify({ fullName: "テスト 太郎", education: "テスト大学", graduationStatus: "卒業", desiredRole: "Webエンジニア" }) });
   const { session } = await request("/interview-sessions", { method: "POST", body: JSON.stringify({ jobRole: "Webエンジニア", industry: "IT", questionCount: 2 }) });
   const { question } = await request(`/interview-sessions/${session.id}/initial-question`, { method: "POST", body: "{}" });
-  const answer = await request(`/interview-sessions/${session.id}/answers`, { method: "POST", body: JSON.stringify({ questionId: question.id, answerText: "集計を自動化し、月6時間の作業を削減しました。" }) });
+  const answerInput = { questionId: question.id, answerText: "集計を自動化し、月6時間の作業を削減しました。", clientRequestId: "request_answer_1" };
+  const answer = await request(`/interview-sessions/${session.id}/answers`, { method: "POST", body: JSON.stringify(answerInput) });
+  const replay = await request(`/interview-sessions/${session.id}/answers`, { method: "POST", body: JSON.stringify(answerInput) });
   assert.equal(answer.analysis.needsDeepDive, true);
   assert.equal(answer.nextQuestion.type, "deep_dive");
+  assert.equal(replay.idempotentReplay, true);
+  assert.equal(replay.answer.id, answer.answer.id);
   const next = await request(`/interview-sessions/${session.id}/next-question`, { method: "POST", body: "{}" });
   assert.equal(next.question.type, "deep_dive");
   await request(`/interview-sessions/${session.id}/finish`, { method: "POST", body: "{}" });
@@ -53,6 +57,11 @@ test("ログインからフィードバック取得まで完走できる", () =>
   const result = await request(`/interview-sessions/${session.id}/feedback`);
   assert.equal(result.feedbackStatus, "succeeded");
   assert.ok(result.feedback.summary);
+  await request(`/interview-sessions/${session.id}`, { method: "DELETE" });
+  const deleted = await fetch(`${base}/interview-sessions/${session.id}`, { headers: { cookie } });
+  assert.equal(deleted.status, 404);
+  const deletedJob = await fetch(`${base}/jobs/${job.id}`, { headers: { cookie } });
+  assert.equal(deletedJob.status, 404);
 }));
 
 test("未許可Originと不正入力を拒否する", () => withServer(async base => {

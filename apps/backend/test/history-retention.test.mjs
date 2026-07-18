@@ -28,3 +28,10 @@ test("次ページがある場合だけさらに20件表示ボタンを出す", 
   state.historyNextCursor = null;
   assert.doesNotMatch(renderHistory(), /さらに20件表示/);
 });
+
+test("履歴詳細で完全削除であることを明示する", async () => {
+  state.session = { id: "session_1", status: "finished", condition: {}, utterances: [] };
+  state.feedback = null;
+  const { renderHistoryDetail } = await import("../../frontend/src/views/history.mjs");
+  assert.match(renderHistoryDetail(), /この履歴を完全に削除/);
+});

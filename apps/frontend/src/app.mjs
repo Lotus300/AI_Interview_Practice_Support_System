@@ -4,7 +4,7 @@ import { hasClickCommand } from "./core/events.mjs";
 import { disposeRecording, startRecording, stopRecording } from "./features/recording.mjs";
 import { previewTextForControl, readVoiceSettings, voicePreviewTexts } from "./features/voice-preview.mjs";
 import { configurePreviewPlayback, createAudioForPlayback, prepareAutoplayPlayback } from "./features/voice-playback.mjs";
-import { readQuestionAutomatically, shouldPrepareNextQuestion } from "./features/question-audio.mjs";
+import { createQuestionVoicePreloader, readQuestionAutomatically, shouldPrepareNextQuestion } from "./features/question-audio.mjs";
 import { render } from "./views/index.mjs";
 
 async function refreshMe() {
@@ -85,6 +85,10 @@ function requestVoice(text, settings, preview) {
   return api("/voice/synthesize", { method: "POST", body: JSON.stringify({ text, ...settings, preview }) });
 }
 
+const questionVoicePreloader = createQuestionVoicePreloader({
+  request: (text, settings) => requestVoice(text, settings, false)
+});
+
 function prepareVoicePreview(text, settings) {
   if (!text || !settings) return;
   const key = voicePreviewKey(text, settings);
@@ -102,10 +106,13 @@ function voiceData(text, settings, preview) {
   return requestVoice(text, settings, preview);
 }
 
-async function synthesizeVoice(text, settings = state.settings, { preview = false, preparedPlayback = null } = {}) {
+async function synthesizeVoice(text, settings = state.settings, { preview = false, preparedPlayback = null, preparedVoice = null } = {}) {
   if (!text) return;
   const previewRequest = preview ? ++latestPreviewRequest : null;
-  const data = await voiceData(text, settings, preview);
+  const reusableVoice = !preview && questionVoicePreloader.matches(preparedVoice, text, settings)
+    ? preparedVoice
+    : (!preview ? questionVoicePreloader.prepare(text, settings) : null);
+  const data = reusableVoice ? await reusableVoice.promise : await voiceData(text, settings, preview);
   if (preview && previewRequest !== latestPreviewRequest) return;
   if (data.aiResponseStatus === "text_only") {
     const reference = data.errorId ? `（エラーID: ${data.errorId}）` : "";
@@ -120,22 +127,29 @@ async function synthesizeVoice(text, settings = state.settings, { preview = fals
     await context?.resume();
     activeVoicePlayback = { audio, context };
     await audio.play();
+    if (reusableVoice) console.info("question_voice_playback_started", { elapsedMs: questionVoicePreloader.elapsedMs(reusableVoice) });
   }
   notify("音声を再生しています。", "info");
 }
 
 async function submitAnswer() {
+  if (state.busy) return;
+  state.answerSubmissionId ||= crypto.randomUUID();
+  const submissionId = state.answerSubmissionId;
   const preparedQuestionPlayback = shouldPrepareNextQuestion(state.session) ? prepareAutoplayPlayback() : null;
   let nextQuestionToRead = null;
+  let preparedQuestionVoice = null;
   state.busy = true;
   render();
   const result = await interviewApi.submitAnswer(state.session.id, {
     questionId: state.question?.id,
     answerText: state.answerDraft,
-    inputType: state.speechStatus === "recognized" ? "speech_corrected" : "text"
+    inputType: state.speechStatus === "recognized" ? "speech_corrected" : "text",
+    clientRequestId: submissionId
   });
   state.session.answers.push(result.answer);
   state.answerDraft = "";
+  state.answerSubmissionId = null;
   state.speechStatus = "idle";
 
   if (result.limitReached || state.session.answers.length >= state.session.condition.questionCount) {
@@ -155,6 +169,7 @@ async function submitAnswer() {
     state.session.questions.push(next.question);
     state.question = next.question;
     nextQuestionToRead = next.question;
+    preparedQuestionVoice = questionVoicePreloader.prepare(next.question.text, state.settings);
     notify(result.analysis.needsDeepDive ? "回答を分析し、内容を深掘りする質問を作成しました。" : "回答を保存し、次の質問へ進みました。", "success");
   }
   state.busy = false;
@@ -164,6 +179,7 @@ async function submitAnswer() {
       question: nextQuestionToRead,
       settings: state.settings,
       preparedPlayback: preparedQuestionPlayback,
+      preparedVoice: preparedQuestionVoice,
       synthesize: synthesizeVoice,
       onFailure: () => notify("質問を自動再生できませんでした。面接官欄の♫ボタンから再生できます。", "info")
     });
@@ -243,7 +259,7 @@ async function openHistory(id) {
 }
 
 async function deleteSession() {
-  if (!confirm("この練習履歴を削除しますか？")) return;
+  if (!confirm("この練習履歴を完全に削除しますか？削除後は復元できません。")) return;
   await interviewApi.remove(state.session.id);
   state.sessions = state.sessions.filter(item => item.id !== state.session.id);
   clearInterviewState();
@@ -289,6 +305,7 @@ const actionHandlers = {
 document.addEventListener("input", event => {
   if (event.target.id === "answerDraft") {
     state.answerDraft = event.target.value;
+    state.answerSubmissionId = null;
     const submit = document.querySelector('[data-action="submit-answer"]');
     if (submit) submit.disabled = !state.answerDraft.trim() || state.busy;
   }
@@ -350,6 +367,7 @@ document.addEventListener("submit", async event => {
       clearInterviewState();
       state.session = (await interviewApi.create(values)).session;
       const data = await interviewApi.initialQuestion(state.session.id);
+      const preparedInitialVoice = questionVoicePreloader.prepare(data.question.text, state.settings);
       state.question = data.question;
       state.session.questions.push(data.question);
       state.screen = "interview";
@@ -359,6 +377,7 @@ document.addEventListener("submit", async event => {
         question: data.question,
         settings: state.settings,
         preparedPlayback: preparedQuestionPlayback,
+        preparedVoice: preparedInitialVoice,
         synthesize: synthesizeVoice,
         onFailure: () => notify("質問を自動再生できませんでした。面接官欄の♫ボタンから再生できます。", "info")
       });
