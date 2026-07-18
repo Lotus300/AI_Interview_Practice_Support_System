@@ -259,7 +259,7 @@ async function openHistory(id) {
 }
 
 async function deleteSession() {
-  if (!confirm("この練習履歴を削除しますか？")) return;
+  if (!confirm("この練習履歴を完全に削除しますか？削除後は復元できません。")) return;
   await interviewApi.remove(state.session.id);
   state.sessions = state.sessions.filter(item => item.id !== state.session.id);
   clearInterviewState();
