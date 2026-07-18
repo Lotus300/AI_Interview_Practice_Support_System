@@ -64,6 +64,32 @@ test("ログインからフィードバック取得まで完走できる", () =>
   assert.equal(deletedJob.status, 404);
 }));
 
+test("concurrent initial-question requests return one saved question", () => withServer(async base => {
+  const loginResponse = await fetch(`${base}/auth/google/start`);
+  const cookie = loginResponse.headers.get("set-cookie").split(";")[0];
+  const request = async (path, options = {}) => {
+    const response = await fetch(`${base}${path}`, {
+      ...options,
+      headers: { cookie, ...(options.body ? { "content-type": "application/json" } : {}) }
+    });
+    assert.ok(response.ok, `${options.method || "GET"} ${path}: ${response.status}`);
+    return response.json();
+  };
+
+  const { session } = await request("/interview-sessions", {
+    method: "POST",
+    body: JSON.stringify({ jobRole: "Web engineer", industry: "IT", questionCount: 5 })
+  });
+  const path = `/interview-sessions/${session.id}/initial-question`;
+  const [first, second] = await Promise.all([
+    request(path, { method: "POST", body: "{}" }),
+    request(path, { method: "POST", body: "{}" })
+  ]);
+
+  assert.equal(second.question.id, first.question.id);
+  assert.equal((await request(`/interview-sessions/${session.id}`)).session.questions.length, 1);
+}));
+
 test("未許可Originと不正入力を拒否する", () => withServer(async base => {
   const forbidden = await fetch(`${base}/auth/logout`, { method: "POST", headers: { origin: "https://evil.example" } });
   assert.equal(forbidden.status, 403);

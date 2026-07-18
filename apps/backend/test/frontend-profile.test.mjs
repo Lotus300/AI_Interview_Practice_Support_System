@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hasClickCommand } from "../../frontend/src/core/events.mjs";
+import { createCommandGate, hasClickCommand } from "../../frontend/src/core/events.mjs";
 import { state } from "../../frontend/src/core/state.mjs";
 import { renderHome, renderProfile } from "../../frontend/src/views/account.mjs";
 
@@ -9,6 +9,24 @@ test("通常のsubmitボタンをグローバルclick処理で再描画しない
   assert.equal(hasClickCommand({ dataset: {} }, handlers), false);
   assert.equal(hasClickCommand({ dataset: { screen: "home" } }, handlers), true);
   assert.equal(hasClickCommand({ dataset: { action: "login" } }, handlers), true);
+});
+
+test("同じ画面コマンドの二重実行を全体ゲートで防止する", async () => {
+  const runOnce = createCommandGate();
+  let executions = 0;
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const first = runOnce("form:condition", async () => {
+    executions += 1;
+    await pending;
+  });
+  const duplicate = runOnce("form:condition", async () => { executions += 1; });
+  await duplicate;
+  assert.equal(executions, 1);
+  release();
+  await first;
+  await runOnce("form:condition", async () => { executions += 1; });
+  assert.equal(executions, 2);
 });
 
 test("初期プロフィールで卒業状況を選択できる", () => {
