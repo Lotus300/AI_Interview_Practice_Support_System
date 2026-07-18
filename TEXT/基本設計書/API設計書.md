@@ -186,6 +186,7 @@ MVPではGoogle OAuthでログインし、Backend APIがサーバ側セッショ
 |---|---|---|---|
 | Auth | GET | `/auth/me` | ログインユーザ取得 |
 | Auth | POST | `/auth/logout` | ログアウト |
+| Account | DELETE | `/account` | 本人確認後、アカウントと関連データを完全削除 |
 | Profile | GET | `/profile` | プロフィール取得 |
 | Profile | PUT | `/profile` | プロフィール保存・更新 |
 | Interview | GET | `/interview-sessions` | 面接履歴一覧 |
