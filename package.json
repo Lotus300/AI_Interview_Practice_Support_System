@@ -9,6 +9,8 @@
     "dev:frontend": "node apps/frontend/server.mjs",
     "dev": "node apps/backend/src/server.mjs",
     "test": "node --test",
+    "test:automation": "node scripts/test-automation.mjs",
+    "test:smoke": "node scripts/test-automation.mjs --skip-tests --target",
     "check": "node --check apps/backend/src/server.mjs && node --check apps/frontend/src/app.mjs",
     "typecheck": "npm run check"
   },

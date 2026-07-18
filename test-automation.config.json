@@ -1,0 +1,15 @@
+{
+  "designDocument": "TEXT/テスト設計書.md",
+  "prHistory": "tests/pr-history.json",
+  "resultDirectory": "test-results",
+  "regressionGroups": [
+    { "name": "deployment-and-foundation", "pullRequests": [1, 2, 4], "testFiles": ["apps/backend/test/api.integration.test.mjs"] },
+    { "name": "firestore-history", "pullRequests": [3, 23, 24, 27, 28], "testFiles": ["apps/backend/test/data-store.test.mjs", "apps/backend/test/history-retention.test.mjs"] },
+    { "name": "authentication-profile", "pullRequests": [5, 6, 7, 16, 29], "testFiles": ["apps/backend/test/oauth.test.mjs", "apps/backend/test/frontend-profile.test.mjs"] },
+    { "name": "voicevox-and-playback", "pullRequests": [8, 9, 10, 11, 12, 14, 19, 20, 25], "testFiles": ["apps/backend/test/voicevox-client.test.mjs", "apps/backend/test/voice-service.test.mjs", "apps/backend/test/voice-playback.test.mjs", "apps/backend/test/question-audio.test.mjs"] },
+    { "name": "llm-interview-feedback", "pullRequests": [13, 15, 17, 18, 22], "testFiles": ["apps/backend/test/services.test.mjs", "apps/backend/test/feedback-async.test.mjs", "apps/backend/test/feedback-no-answer.integration.test.mjs"] },
+    { "name": "speech-recognition", "pullRequests": [21], "testFiles": ["apps/backend/test/realtime-speech.test.mjs", "apps/backend/test/google-services.test.mjs"] },
+    { "name": "duplicate-submission", "pullRequests": [26, 30], "testFiles": ["apps/backend/test/api.integration.test.mjs", "apps/backend/test/frontend-profile.test.mjs"] },
+    { "name": "mobile-login", "pullRequests": [31], "testFiles": ["apps/frontend/style.css"] }
+  ]
+}

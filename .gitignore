@@ -3,5 +3,6 @@ node_modules/
 *.log
 coverage/
 benchmark-results/
+test-results/
 .DS_Store
 gha-creds-*.json
