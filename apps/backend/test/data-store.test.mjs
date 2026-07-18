@@ -43,3 +43,28 @@ test("作成から30日を過ぎた履歴と関連データを削除する", asy
   assert.equal(await store.getFeedback("expired"), null);
   assert.equal(await store.getJob("job_expired"), null);
 });
+
+test("履歴を20件ずつ重複なくカーソル取得する", async () => {
+  const store = new MemoryDataStore();
+  const base = Date.now() - 60 * 60 * 1000;
+  for (let index = 0; index < 45; index += 1) {
+    await store.saveSession({
+      id: `session_${String(index).padStart(2, "0")}`,
+      userId: "usr_1",
+      status: sessionStatuses.FINISHED,
+      createdAt: new Date(base - index * 1000).toISOString(),
+      deletedAt: null
+    });
+  }
+
+  const first = await store.listSessionPage("usr_1");
+  const second = await store.listSessionPage("usr_1", { cursor: first.nextCursor });
+  const third = await store.listSessionPage("usr_1", { cursor: second.nextCursor });
+  const ids = [...first.sessions, ...second.sessions, ...third.sessions].map(item => item.id);
+
+  assert.equal(first.sessions.length, 20);
+  assert.equal(second.sessions.length, 20);
+  assert.equal(third.sessions.length, 5);
+  assert.equal(third.nextCursor, null);
+  assert.equal(new Set(ids).size, 45);
+});

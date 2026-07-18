@@ -6,6 +6,7 @@ export const state = {
   settings: null,
   voiceSettingsDraft: null,
   sessions: [],
+  historyNextCursor: null,
   session: null,
   question: null,
   answerDraft: "",

@@ -11,14 +11,15 @@ async function refreshMe() {
   try {
     const { user } = await api("/auth/me");
     state.user = user;
-    const [{ profile }, { settings }, { sessions }] = await Promise.all([
+    const [{ profile }, { settings }, history] = await Promise.all([
       api("/profile"), api("/settings"), interviewApi.list()
     ]);
     const hasSavedProfile = Boolean(profile);
     Object.assign(state, {
       profile,
       settings,
-      sessions,
+      sessions: history.sessions,
+      historyNextCursor: history.nextCursor,
       user: hasSavedProfile ? { ...user, profileCompleted: true } : user,
       screen: user.profileCompleted || hasSavedProfile ? "home" : "profile"
     });
@@ -32,7 +33,11 @@ async function navigate(screen) {
   if (screen !== "feedback") feedbackPollingGeneration += 1;
   state.drawerOpen = false;
   if (screen !== "settings") state.voiceSettingsDraft = null;
-  if (screen === "history" || screen === "home") state.sessions = (await interviewApi.list()).sessions;
+  if (screen === "history" || screen === "home") {
+    const history = await interviewApi.list();
+    state.sessions = history.sessions;
+    state.historyNextCursor = history.nextCursor;
+  }
   if (screen === "profile") {
     const { profile } = await api("/profile");
     state.profile = profile;
@@ -64,7 +69,7 @@ async function handleLogout() {
   disposeRecording();
   await api("/auth/logout", { method: "POST" });
   clearInterviewState();
-  Object.assign(state, { user: null, profile: null, settings: null, voiceSettingsDraft: null, sessions: [], screen: "login", drawerOpen: false });
+  Object.assign(state, { user: null, profile: null, settings: null, voiceSettingsDraft: null, sessions: [], historyNextCursor: null, screen: "login", drawerOpen: false });
 }
 
 let activeVoicePlayback = null;
@@ -246,6 +251,17 @@ async function deleteSession() {
   notify("履歴を削除しました。", "success");
 }
 
+async function loadMoreHistory() {
+  if (!state.historyNextCursor || state.busy) return;
+  state.busy = true;
+  render();
+  const history = await interviewApi.list(state.historyNextCursor);
+  const existingIds = new Set(state.sessions.map(item => item.id));
+  state.sessions.push(...history.sessions.filter(item => !existingIds.has(item.id)));
+  state.historyNextCursor = history.nextCursor;
+  state.busy = false;
+}
+
 const actionHandlers = {
   "toggle-drawer": async () => { state.drawerOpen = !state.drawerOpen; },
   "close-drawer": async () => { state.drawerOpen = false; },
@@ -266,6 +282,7 @@ const actionHandlers = {
     await pollFeedbackJob(state.feedbackJobId, generation);
   },
   "open-history": (target) => openHistory(target.dataset.id),
+  "load-more-history": loadMoreHistory,
   "delete-session": deleteSession
 };
 

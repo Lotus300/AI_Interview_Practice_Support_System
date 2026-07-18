@@ -5,6 +5,7 @@ import { sessionStatuses } from "../../../../../packages/shared/src/constants.mj
 import { findOwnedSession, sendResourceError } from "../../core/resources.mjs";
 import { numberInRange, optionalText, requireText } from "../../core/validation.mjs";
 import { ApiError } from "../../core/errors.mjs";
+import { HISTORY_PAGE_SIZE } from "./retention.mjs";
 
 async function owned(res, sessionId, userId) {
   const found = await findOwnedSession(sessionId, userId);
@@ -22,11 +23,11 @@ function reachedQuestionLimit(session) {
 }
 
 export function registerInterviewRoutes(router, { aiService = createInterviewAiService(), voiceService } = {}) {
-  router.add("GET", "/api/v1/interview-sessions", async (_req, res, ctx) => {
+  router.add("GET", "/api/v1/interview-sessions", async (req, res, ctx) => {
     const store = await getDataStore();
-    await store.purgeExpiredSessions(ctx.user.id);
-    const sessions = await store.listSessions(ctx.user.id);
-    sendJson(res, 200, { sessions });
+    const cursor = new URL(req.url, "http://localhost").searchParams.get("cursor");
+    if (!cursor) await store.purgeExpiredSessions(ctx.user.id);
+    sendJson(res, 200, await store.listSessionPage(ctx.user.id, { limit: HISTORY_PAGE_SIZE, cursor }));
   });
 
   router.add("POST", "/api/v1/interview-sessions", async (req, res, ctx) => {

@@ -1,0 +1,53 @@
+name: Configure Firestore history retention
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Enable TTL for interview history
+        run: >-
+          gcloud firestore fields ttls update expiresAt
+          --collection-group=interviewSessions
+          --enable-ttl
+          --database='(default)'
+          --project='${{ vars.GCP_PROJECT_ID }}'
+          --quiet
+
+      - name: Create history pagination index if missing
+        shell: bash
+        run: |
+          set +e
+          output="$(gcloud firestore indexes composite create \
+            --collection-group=interviewSessions \
+            --query-scope=collection \
+            --field-config=field-path=userId,order=ascending \
+            --field-config=field-path=status,order=ascending \
+            --field-config=field-path=deletedAt,order=ascending \
+            --field-config=field-path=createdAt,order=descending \
+            --field-config=field-path=__name__,order=descending \
+            --database='(default)' \
+            --project='${{ vars.GCP_PROJECT_ID }}' \
+            --quiet 2>&1)"
+          status=$?
+          set -e
+          echo "$output"
+          if [ $status -ne 0 ] && ! grep -qiE 'already exists|ALREADY_EXISTS' <<<"$output"; then
+            exit $status
+          fi

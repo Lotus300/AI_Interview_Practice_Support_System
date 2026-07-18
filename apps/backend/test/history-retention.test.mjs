@@ -20,3 +20,11 @@ test("履歴画面上部に1か月の保存期間と自動削除を表示する"
   assert.match(html, /1か月間（30日間）保存/);
   assert.match(html, /自動的に削除/);
 });
+
+test("次ページがある場合だけさらに20件表示ボタンを出す", () => {
+  state.sessions = [{ id: "session_1", status: "finished", condition: {}, createdAt: new Date().toISOString() }];
+  state.historyNextCursor = "next-page";
+  assert.match(renderHistory(), /さらに20件表示/);
+  state.historyNextCursor = null;
+  assert.doesNotMatch(renderHistory(), /さらに20件表示/);
+});
