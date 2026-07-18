@@ -123,11 +123,11 @@ export async function finishFeedbackJob(jobId, { generateFeedback = createVertex
     await store.saveJob(job);
     Object.assign(session, { feedbackStatus: feedbackStatuses.SUCCEEDED, summary: feedback.summary, updatedAt: nowIso() });
     Object.assign(job, { status: feedbackStatuses.SUCCEEDED, progress: 100, result: { sessionId: session.id, feedbackId: feedback.id }, completedAt: nowIso(), updatedAt: nowIso() });
-    await Promise.all([store.saveFeedback(feedback), store.saveSession(session), store.saveJob(job)]);
+    await Promise.all([store.saveFeedback(feedback), store.saveSessionDelta(session), store.saveJob(job)]);
   } catch (error) {
     Object.assign(session, { feedbackStatus: feedbackStatuses.FAILED, updatedAt: nowIso() });
     Object.assign(job, { status: feedbackStatuses.FAILED, progress: 100, error: { code: error.code || "FEEDBACK_GENERATION_FAILED", message: "フィードバック生成に失敗しました", retryable: true }, updatedAt: nowIso() });
-    await Promise.all([store.saveSession(session), store.saveJob(job)]);
+    await Promise.all([store.saveSessionDelta(session), store.saveJob(job)]);
   }
   return job;
 }

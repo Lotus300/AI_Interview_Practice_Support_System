@@ -33,13 +33,13 @@ export function registerFeedbackRoutes(router, {
     try {
       const [task] = await Promise.all([
         dispatcher.enqueue(job),
-        store.saveSession(found.session)
+        store.saveSessionDelta(found.session)
       ]);
       sendJson(res, 202, { job, pollingUrl: task.pollingUrl, registrationMs: task.registrationMs });
     } catch (error) {
       Object.assign(job, { status: feedbackStatuses.FAILED, error: { code: error.code || "QUEUE_ERROR", message: "ジョブの登録に失敗しました", retryable: true }, updatedAt: nowIso() });
       found.session.feedbackStatus = feedbackStatuses.FAILED;
-      await Promise.all([store.saveJob(job), store.saveSession(found.session)]);
+      await Promise.all([store.saveJob(job), store.saveSessionDelta(found.session)]);
       throw error;
     }
   });

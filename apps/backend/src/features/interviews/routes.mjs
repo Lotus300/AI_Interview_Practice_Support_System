@@ -23,6 +23,7 @@ function reachedQuestionLimit(session) {
 }
 
 export function registerInterviewRoutes(router, { aiService = createInterviewAiService(), voiceService } = {}) {
+  const answerLocks = new Map();
   router.add("GET", "/api/v1/interview-sessions", async (req, res, ctx) => {
     const store = await getDataStore();
     const cursor = new URL(req.url, "http://localhost").searchParams.get("cursor");
@@ -52,9 +53,7 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
   router.add("DELETE", "/api/v1/interview-sessions/:sessionId", async (_req, res, ctx, params) => {
     const found = await owned(res, params.sessionId, ctx.user.id);
     if (!found.session) return;
-    found.session.deletedAt = nowIso();
-    found.session.updatedAt = nowIso();
-    await (await getDataStore()).saveSession(found.session);
+    await (await getDataStore()).deleteSessionData(found.session.id);
     sendNoContent(res);
   });
 
@@ -68,58 +67,75 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     const store = await getDataStore();
     const question = await aiService.initialQuestion(await store.getProfile(ctx.user.id), found.session);
     found.session.questions.push(question);
-    appendUtterance(found.session, "ai", question.text, question.type);
+    const questionUtterance = appendUtterance(found.session, "ai", question.text, question.type);
     found.session.status = sessionStatuses.WAITING_ANSWER;
     found.session.updatedAt = nowIso();
-    await store.saveSession(found.session);
+    await store.saveSessionDelta(found.session, { questions: [question], utterances: [questionUtterance] });
     sendJson(res, 200, { question, sessionStatus: found.session.status });
   });
 
   router.add("POST", "/api/v1/interview-sessions/:sessionId/answers", async (req, res, ctx, params) => {
     const found = await owned(res, params.sessionId, ctx.user.id);
     if (!found.session) return;
-    if (found.session.status !== sessionStatuses.WAITING_ANSWER) throw new ApiError(409, "INVALID_STATE", "現在は回答を送信できません");
     const body = await readJson(req);
     const text = requireText(body.answerText ?? body.transcript, "回答", 8000);
+    const clientRequestId = body.clientRequestId ? requireText(body.clientRequestId, "送信ID", 100) : null;
     const store = await getDataStore();
+    const existingAnswer = clientRequestId && found.session.answers.find(answer => answer.clientRequestId === clientRequestId);
+    if (existingAnswer) {
+      const questionIndex = found.session.questions.findIndex(question => question.id === existingAnswer.questionId);
+      return sendJson(res, 200, {
+        answer: existingAnswer,
+        analysis: existingAnswer.analysis,
+        nextQuestion: found.session.questions[questionIndex + 1] || null,
+        limitReached: found.session.answers.length >= configuredQuestionCount(found.session),
+        sessionStatus: found.session.status,
+        idempotentReplay: true
+      });
+    }
+    if (found.session.status !== sessionStatuses.WAITING_ANSWER) throw new ApiError(409, "INVALID_STATE", "現在は回答を送信できません");
     const currentQuestion = found.session.questions.at(-1);
     if (!currentQuestion || (body.questionId && body.questionId !== currentQuestion.id)) throw new ApiError(409, "INVALID_STATE", "表示中の質問に回答してください");
     if (found.session.answers.length >= configuredQuestionCount(found.session)) throw new ApiError(409, "QUESTION_LIMIT_REACHED", "設定した質問数に到達しています");
     if (found.session.answers.some(answer => answer.questionId === currentQuestion.id)) throw new ApiError(409, "ALREADY_ANSWERED", "この質問には回答済みです");
-    const willReachLimit = found.session.answers.length + 1 >= configuredQuestionCount(found.session);
-    const profile = await store.getProfile(ctx.user.id);
-    void voiceService?.warmup?.();
-    const turn = !willReachLimit && aiService.analyzeAndNext
-      ? await aiService.analyzeAndNext(profile, found.session, text)
-      : { analysis: await aiService.analyze(profile, found.session, text), nextQuestion: null };
-    const { analysis, nextQuestion } = turn;
-    const answer = {
-      id: createId("ans"),
-      questionId: currentQuestion.id,
-      text,
-      inputType: body.inputType ?? "text",
-      speechTranscriptConfidence: body.confidence ?? null,
-      analysis,
-      createdAt: nowIso()
-    };
-    found.session.answers.push(answer);
-    appendUtterance(found.session, "user", text, "answer");
-    if (nextQuestion) {
-      found.session.questions.push(nextQuestion);
-      appendUtterance(found.session, "ai", nextQuestion.text, nextQuestion.type);
-      found.session.status = sessionStatuses.WAITING_ANSWER;
-    } else {
-      found.session.status = sessionStatuses.ANSWER_ANALYZING;
+    const lockKey = `${found.session.id}:${currentQuestion.id}`;
+    let lock = answerLocks.get(lockKey);
+    if (lock && (lock.clientRequestId !== clientRequestId || lock.text !== text)) {
+      throw new ApiError(409, "ANSWER_SUBMISSION_IN_PROGRESS", "この質問の回答を送信中です");
     }
-    found.session.updatedAt = nowIso();
-    await store.saveSession(found.session);
-    sendJson(res, 200, {
-      answer,
-      analysis,
-      nextQuestion,
-      limitReached: found.session.answers.length >= configuredQuestionCount(found.session),
-      sessionStatus: found.session.status
-    });
+    if (!lock) {
+      const processing = (async () => {
+        const willReachLimit = found.session.answers.length + 1 >= configuredQuestionCount(found.session);
+        const profile = await store.getProfile(ctx.user.id);
+        void voiceService?.warmup?.();
+        const turn = !willReachLimit && aiService.analyzeAndNext
+          ? await aiService.analyzeAndNext(profile, found.session, text)
+          : { analysis: await aiService.analyze(profile, found.session, text), nextQuestion: null };
+        const { analysis, nextQuestion } = turn;
+        const answer = {
+          id: createId("ans"), clientRequestId, questionId: currentQuestion.id, text,
+          inputType: body.inputType ?? "text", speechTranscriptConfidence: body.confidence ?? null,
+          analysis, createdAt: nowIso()
+        };
+        found.session.answers.push(answer);
+        const userUtterance = appendUtterance(found.session, "user", text, "answer");
+        const newQuestions = [];
+        const newUtterances = [userUtterance];
+        if (nextQuestion) {
+          found.session.questions.push(nextQuestion);
+          newQuestions.push(nextQuestion);
+          newUtterances.push(appendUtterance(found.session, "ai", nextQuestion.text, nextQuestion.type));
+          found.session.status = sessionStatuses.WAITING_ANSWER;
+        } else found.session.status = sessionStatuses.ANSWER_ANALYZING;
+        found.session.updatedAt = nowIso();
+        await store.saveSessionDelta(found.session, { questions: newQuestions, answers: [answer], utterances: newUtterances });
+        return { answer, analysis, nextQuestion, limitReached: found.session.answers.length >= configuredQuestionCount(found.session), sessionStatus: found.session.status };
+      })();
+      lock = { clientRequestId, text, processing };
+      answerLocks.set(lockKey, lock);
+      processing.finally(() => answerLocks.delete(lockKey)).catch(() => {});
+    }
+    sendJson(res, 200, await lock.processing);
   });
 
   router.add("POST", "/api/v1/interview-sessions/:sessionId/next-question", async (_req, res, ctx, params) => {
@@ -136,10 +152,10 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     const store = await getDataStore();
     const question = await aiService.nextQuestion(await store.getProfile(ctx.user.id), found.session);
     found.session.questions.push(question);
-    appendUtterance(found.session, "ai", question.text, question.type);
+    const questionUtterance = appendUtterance(found.session, "ai", question.text, question.type);
     found.session.status = sessionStatuses.WAITING_ANSWER;
     found.session.updatedAt = nowIso();
-    await store.saveSession(found.session);
+    await store.saveSessionDelta(found.session, { questions: [question], utterances: [questionUtterance] });
     sendJson(res, 200, { question, sessionStatus: found.session.status });
   });
 
@@ -150,7 +166,7 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     found.session.status = sessionStatuses.FINISHED;
     found.session.finishedAt = nowIso();
     found.session.updatedAt = nowIso();
-    await (await getDataStore()).saveSession(found.session);
+    await (await getDataStore()).saveSessionDelta(found.session);
     sendJson(res, 200, { session: found.session });
   });
 }
