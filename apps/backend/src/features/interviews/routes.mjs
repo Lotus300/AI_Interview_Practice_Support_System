@@ -23,6 +23,7 @@ function reachedQuestionLimit(session) {
 }
 
 export function registerInterviewRoutes(router, { aiService = createInterviewAiService(), voiceService } = {}) {
+  const initialQuestionLocks = new Map();
   const answerLocks = new Map();
   router.add("GET", "/api/v1/interview-sessions", async (req, res, ctx) => {
     const store = await getDataStore();
@@ -63,15 +64,23 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     if (found.session.questions.length) {
       return sendJson(res, 200, { question: found.session.questions.at(-1), sessionStatus: found.session.status });
     }
-    void voiceService?.warmup?.();
-    const store = await getDataStore();
-    const question = await aiService.initialQuestion(await store.getProfile(ctx.user.id), found.session);
-    found.session.questions.push(question);
-    const questionUtterance = appendUtterance(found.session, "ai", question.text, question.type);
-    found.session.status = sessionStatuses.WAITING_ANSWER;
-    found.session.updatedAt = nowIso();
-    await store.saveSessionDelta(found.session, { questions: [question], utterances: [questionUtterance] });
-    sendJson(res, 200, { question, sessionStatus: found.session.status });
+    let processing = initialQuestionLocks.get(found.session.id);
+    if (!processing) {
+      processing = (async () => {
+        void voiceService?.warmup?.();
+        const store = await getDataStore();
+        const question = await aiService.initialQuestion(await store.getProfile(ctx.user.id), found.session);
+        found.session.questions.push(question);
+        const questionUtterance = appendUtterance(found.session, "ai", question.text, question.type);
+        found.session.status = sessionStatuses.WAITING_ANSWER;
+        found.session.updatedAt = nowIso();
+        await store.saveSessionDelta(found.session, { questions: [question], utterances: [questionUtterance] });
+        return { question, sessionStatus: found.session.status };
+      })();
+      initialQuestionLocks.set(found.session.id, processing);
+      processing.finally(() => initialQuestionLocks.delete(found.session.id)).catch(() => {});
+    }
+    sendJson(res, 200, await processing);
   });
 
   router.add("POST", "/api/v1/interview-sessions/:sessionId/answers", async (req, res, ctx, params) => {

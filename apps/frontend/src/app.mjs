@@ -361,10 +361,12 @@ document.addEventListener("click", async event => {
 
 document.addEventListener("submit", async event => {
   event.preventDefault();
+  if (state.busy) return;
   const form = event.target;
   const values = Object.fromEntries(new FormData(form).entries());
   const preparedQuestionPlayback = form.dataset.form === "condition" ? prepareAutoplayPlayback() : null;
   state.busy = true;
+  render();
   try {
     if (form.dataset.form === "profile") {
       const data = await api("/profile", { method: "PUT", body: JSON.stringify(values) });
