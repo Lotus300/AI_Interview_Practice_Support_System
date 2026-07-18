@@ -1,0 +1,42 @@
+name: Automated regression tests
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: Optional deployed URL for smoke tests
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run design and PR regression tests
+        env:
+          TEST_TARGET_URL: ${{ inputs.target_url }}
+        run: pnpm test:automation
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: automated-test-report
+          path: test-results/
+          if-no-files-found: error
