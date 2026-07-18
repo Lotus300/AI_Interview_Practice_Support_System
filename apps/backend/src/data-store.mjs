@@ -86,6 +86,7 @@ export class MemoryDataStore {
     for (const [jobId, job] of this.collections.jobs) if (job.sessionId === sessionId) this.collections.jobs.delete(jobId);
   }
   async saveSession(session) { this.collections.sessions.set(session.id, clone(session)); return clone(session); }
+  async saveSessionDelta(session) { this.collections.sessions.set(session.id, clone(session)); return clone(session); }
   async getJob(id) { return clone(this.collections.jobs.get(id) ?? null); }
   async findActiveFeedbackJob(sessionId, statuses) {
     return clone([...this.collections.jobs.values()].find(job => job.sessionId === sessionId && statuses.includes(job.status)) ?? null);
@@ -225,6 +226,16 @@ export async function createFirestoreDataStore({ projectId, databaseId = "(defau
       for (const question of session.questions) batch.set(ref.collection("questions").doc(question.id), toFirestore({ ...question, sessionId: session.id, userId: session.userId }), { merge: true });
       for (const answer of session.answers) batch.set(ref.collection("answers").doc(answer.id), toFirestore({ ...answer, sessionId: session.id, userId: session.userId }), { merge: true });
       for (const utterance of session.utterances) batch.set(ref.collection("utterances").doc(utterance.id), toFirestore({ ...utterance, sessionId: session.id, userId: session.userId }), { merge: true });
+      await batch.commit();
+      return session;
+    },
+    async saveSessionDelta(session, { questions = [], answers = [], utterances = [] } = {}) {
+      const ref = firestore.collection("interviewSessions").doc(session.id);
+      const batch = firestore.batch();
+      batch.set(ref, toFirestore(baseSession(session)), { merge: true });
+      for (const question of questions) batch.set(ref.collection("questions").doc(question.id), toFirestore({ ...question, sessionId: session.id, userId: session.userId }), { merge: true });
+      for (const answer of answers) batch.set(ref.collection("answers").doc(answer.id), toFirestore({ ...answer, sessionId: session.id, userId: session.userId }), { merge: true });
+      for (const utterance of utterances) batch.set(ref.collection("utterances").doc(utterance.id), toFirestore({ ...utterance, sessionId: session.id, userId: session.userId }), { merge: true });
       await batch.commit();
       return session;
     },

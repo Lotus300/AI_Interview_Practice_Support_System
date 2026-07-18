@@ -53,9 +53,7 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
   router.add("DELETE", "/api/v1/interview-sessions/:sessionId", async (_req, res, ctx, params) => {
     const found = await owned(res, params.sessionId, ctx.user.id);
     if (!found.session) return;
-    found.session.deletedAt = nowIso();
-    found.session.updatedAt = nowIso();
-    await (await getDataStore()).saveSession(found.session);
+    await (await getDataStore()).deleteSessionData(found.session.id);
     sendNoContent(res);
   });
 
@@ -69,10 +67,10 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     const store = await getDataStore();
     const question = await aiService.initialQuestion(await store.getProfile(ctx.user.id), found.session);
     found.session.questions.push(question);
-    appendUtterance(found.session, "ai", question.text, question.type);
+    const questionUtterance = appendUtterance(found.session, "ai", question.text, question.type);
     found.session.status = sessionStatuses.WAITING_ANSWER;
     found.session.updatedAt = nowIso();
-    await store.saveSession(found.session);
+    await store.saveSessionDelta(found.session, { questions: [question], utterances: [questionUtterance] });
     sendJson(res, 200, { question, sessionStatus: found.session.status });
   });
 
@@ -120,14 +118,17 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
           analysis, createdAt: nowIso()
         };
         found.session.answers.push(answer);
-        appendUtterance(found.session, "user", text, "answer");
+        const userUtterance = appendUtterance(found.session, "user", text, "answer");
+        const newQuestions = [];
+        const newUtterances = [userUtterance];
         if (nextQuestion) {
           found.session.questions.push(nextQuestion);
-          appendUtterance(found.session, "ai", nextQuestion.text, nextQuestion.type);
+          newQuestions.push(nextQuestion);
+          newUtterances.push(appendUtterance(found.session, "ai", nextQuestion.text, nextQuestion.type));
           found.session.status = sessionStatuses.WAITING_ANSWER;
         } else found.session.status = sessionStatuses.ANSWER_ANALYZING;
         found.session.updatedAt = nowIso();
-        await store.saveSession(found.session);
+        await store.saveSessionDelta(found.session, { questions: newQuestions, answers: [answer], utterances: newUtterances });
         return { answer, analysis, nextQuestion, limitReached: found.session.answers.length >= configuredQuestionCount(found.session), sessionStatus: found.session.status };
       })();
       lock = { clientRequestId, text, processing };
@@ -151,10 +152,10 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     const store = await getDataStore();
     const question = await aiService.nextQuestion(await store.getProfile(ctx.user.id), found.session);
     found.session.questions.push(question);
-    appendUtterance(found.session, "ai", question.text, question.type);
+    const questionUtterance = appendUtterance(found.session, "ai", question.text, question.type);
     found.session.status = sessionStatuses.WAITING_ANSWER;
     found.session.updatedAt = nowIso();
-    await store.saveSession(found.session);
+    await store.saveSessionDelta(found.session, { questions: [question], utterances: [questionUtterance] });
     sendJson(res, 200, { question, sessionStatus: found.session.status });
   });
 
@@ -165,7 +166,7 @@ export function registerInterviewRoutes(router, { aiService = createInterviewAiS
     found.session.status = sessionStatuses.FINISHED;
     found.session.finishedAt = nowIso();
     found.session.updatedAt = nowIso();
-    await (await getDataStore()).saveSession(found.session);
+    await (await getDataStore()).saveSessionDelta(found.session);
     sendJson(res, 200, { session: found.session });
   });
 }

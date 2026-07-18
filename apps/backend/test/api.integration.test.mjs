@@ -57,6 +57,11 @@ test("ログインからフィードバック取得まで完走できる", () =>
   const result = await request(`/interview-sessions/${session.id}/feedback`);
   assert.equal(result.feedbackStatus, "succeeded");
   assert.ok(result.feedback.summary);
+  await request(`/interview-sessions/${session.id}`, { method: "DELETE" });
+  const deleted = await fetch(`${base}/interview-sessions/${session.id}`, { headers: { cookie } });
+  assert.equal(deleted.status, 404);
+  const deletedJob = await fetch(`${base}/jobs/${job.id}`, { headers: { cookie } });
+  assert.equal(deletedJob.status, 404);
 }));
 
 test("未許可Originと不正入力を拒否する", () => withServer(async base => {
